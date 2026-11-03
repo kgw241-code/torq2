@@ -1,0 +1,1742 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="손님의 아리송한 주문을 해석해 프레스·차체·도장·의장 공정으로 차를 만들고 1년 영업을 버티는 게임">
+<style>
+/* page reset (stands in for the artifact viewer's skeleton) */
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font-size: 14px; }
+img { max-width: 100%; }
+</style>
+<title>좋은 차 위대한 차</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+/* Layout: one column, max 480px — ledger bar / customer counter / scene (showroom → press → body → paint → trim → showroom) / parts shelf. Garage sticker look: concrete ground, ink outlines, safety-orange accent. Single deliberate light look. */
+:root {
+  --bg: #cfd6dc;
+  --panel: #f3f5f6;
+  --ink: #18212b;
+  --muted: #56636f;
+  --accent: #ff7a1a;
+  --accent-ink: #2a1300;
+  --good: #1f9d55;
+  --warn: #e0a800;
+  --bad: #d63a2f;
+  --font-display: "Black Han Sans", "IBM Plex Sans KR", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  background-image: radial-gradient(rgba(24,33,43,.07) 1px, transparent 1px);
+  background-size: 14px 14px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+}
+.app {
+  max-width: 480px; margin: 0 auto; min-height: 100%;
+  padding-block: 12px 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.app.shake { animation: shake .35s; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); } 80% { transform: translateX(3px); }
+}
+#game { display: contents; }
+.card { background: var(--panel); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 4px 4px 0 var(--ink); }
+
+/* ---------- ledger bar ---------- */
+.hud { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 12px; align-items: end; padding: 8px 12px; font-variant-numeric: tabular-nums; }
+.hud .date { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; border-bottom: 2px dashed var(--muted); padding-bottom: 4px; }
+.hud .date span:last-child { color: var(--muted); }
+.lbl { font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.val { font-family: var(--font-display); font-size: clamp(19px, 5.6vw, 24px); line-height: 1.05; }
+.rating .val { color: var(--accent); -webkit-text-stroke: .6px var(--ink); }
+.rating.danger .val { color: var(--bad); }
+.right { text-align: right; }
+
+/* ---------- customer ---------- */
+.counter { padding: 10px 12px; display: grid; gap: 8px; position: relative; }
+.cust-row { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+.face { width: clamp(50px, 15vw, 62px); aspect-ratio: 1; background: #fff; border: 3px solid var(--ink); border-radius: 50%; overflow: hidden; }
+.face svg { display: block; width: 100%; height: 100%; }
+.bubble { position: relative; min-width: 0; background: #fff; border: 3px solid var(--ink); border-radius: 12px; padding: 8px 12px; min-height: 52px; cursor: pointer; }
+.bubble::before { content: ""; position: absolute; left: -11px; top: 50%; margin-top: -8px; border: 8px solid transparent; border-right: 9px solid var(--ink); border-left: 0; }
+.say { margin: 0; font-weight: 600; font-size: clamp(14px, 4.1vw, 16px); line-height: 1.55; word-break: keep-all; }
+.say.good { color: var(--good); font-weight: 700; }
+.say.bad { color: var(--bad); font-weight: 700; }
+.say .caret { display: inline-block; width: .5em; animation: blink .7s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.stars { font-size: 18px; letter-spacing: 1px; color: var(--accent); -webkit-text-stroke: .5px var(--ink); }
+.stars .off { color: #d9dde1; }
+.quote { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.quote b { color: var(--ink); font-size: 14px; }
+.gauge { height: 12px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
+.gauge i { display: block; height: 100%; width: 100%; background: var(--good); }
+.gauge.mid i { background: var(--warn); }
+.gauge.low i { background: var(--bad); }
+.float {
+  position: absolute; right: 16px; top: 4px; pointer-events: none; z-index: 5;
+  font-family: var(--font-display); font-size: clamp(22px, 7vw, 30px); color: var(--good);
+  -webkit-text-stroke: 1px var(--ink); animation: floatup 1.1s ease-out forwards;
+}
+.float.cut { color: var(--bad); }
+@keyframes floatup { from { transform: translateY(10px); opacity: 0; } 15% { opacity: 1; } to { transform: translateY(-40px); opacity: 0; } }
+
+/* ---------- scene ---------- */
+.bay { padding: 10px 12px 12px; display: grid; gap: 8px; }
+.line { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.line .st { text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); padding: 3px 2px; border: 2px dashed var(--muted); border-radius: 8px; white-space: nowrap; }
+.line .st small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+.line .st.done { color: var(--good); border-color: var(--good); border-style: solid; background: #e6f6ec; }
+.line .st.now { color: var(--accent-ink); background: var(--accent); border: 2px solid var(--ink); }
+.stagebox { position: relative; border: 3px solid var(--ink); border-radius: 10px; overflow: hidden; background: #e6eaee; }
+.stagebox.over { outline: 4px dashed var(--accent); outline-offset: -8px; }
+#scene { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.seamhint { animation: dash 0.8s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -18; } }
+.bob { animation: bob .32s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+.spin { animation: spin .35s linear infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hint { margin: 0; text-align: center; font-size: 13px; font-weight: 600; color: var(--muted); min-height: 1.4em; word-break: keep-all; }
+.hint b { color: var(--ink); }
+.meter { height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+.titlecard {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: var(--ink); color: #fff; border-radius: 10px; padding: 8px 18px; text-align: center;
+  font-family: var(--font-display); font-size: clamp(20px, 6vw, 28px); pointer-events: none;
+  animation: card 1s ease forwards;
+}
+.titlecard small { display: block; font-family: var(--font-body); font-size: 11px; letter-spacing: .14em; color: var(--accent); font-weight: 700; }
+@keyframes card { 0% { opacity: 0; transform: translate(-50%, -30%); } 20%, 75% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -60%); } }
+.toast {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  background: #fff; border: 2px solid var(--ink); border-radius: 99px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; white-space: nowrap; pointer-events: none; animation: toast 1.6s ease forwards;
+}
+@keyframes toast { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* contract document over the showroom */
+.doc {
+  position: absolute; left: 4%; top: 6%; width: min(56%, 250px);
+  background: #fffdf6; border: 2px solid var(--ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--ink);
+  padding: 8px 10px; font-size: 11px; line-height: 1.45; transform-origin: bottom center;
+  animation: docin .35s ease-out;
+}
+@keyframes docin { from { transform: translateY(30px) rotate(-4deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.doc h3 { margin: 0 0 4px; font-family: var(--font-display); font-weight: 400; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; }
+.doc h3 span { font-family: var(--font-body); font-size: 10px; color: var(--muted); }
+.doc dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 0; font-variant-numeric: tabular-nums; }
+.doc dt { color: var(--muted); } .doc dd { margin: 0; font-weight: 700; text-align: right; }
+.sign { margin-top: 6px; height: 46px; border: 2px dashed var(--muted); border-radius: 6px; display: grid; place-items: center; color: var(--muted); font-weight: 600; position: relative; }
+.sign.over { border-color: var(--accent); background: #fff1e4; }
+.stamp {
+  position: absolute; width: 42px; height: 42px; border: 3px solid var(--bad); border-radius: 50%;
+  color: var(--bad); display: grid; place-items: center; font-family: var(--font-display); font-size: 13px; line-height: 1;
+  transform: rotate(-12deg); animation: stamp .25s ease-out;
+}
+@keyframes stamp { from { transform: scale(2) rotate(-12deg); opacity: 0; } to { transform: scale(1) rotate(-12deg); opacity: .9; } }
+
+/* ---------- parts shelf ---------- */
+.shelf { padding: 10px 12px 12px; display: grid; gap: 10px; }
+.shelf h4 { margin: 0; font-size: 12px; letter-spacing: .08em; color: var(--muted); font-weight: 700; display: flex; justify-content: space-between; }
+.tray { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.part {
+  position: relative; min-height: 76px; padding: 4px 4px 6px;
+  font: inherit; font-weight: 700; font-size: 13px; color: var(--ink);
+  background: #fff; border: 3px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 var(--ink);
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: center; gap: 2px;
+}
+.part svg { width: 100%; max-width: 64px; height: 40px; pointer-events: none; }
+.part .k { position: absolute; top: 2px; left: 6px; font-size: 10px; color: var(--muted); }
+.part.sel { background: #fff1e4; outline: 3px solid var(--accent); outline-offset: -8px; }
+.part:active { cursor: grabbing; }
+.part:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.part.dragging { opacity: .35; }
+.dragghost {
+  position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; width: 84px; height: 60px;
+  display: grid; place-items: center; filter: drop-shadow(3px 5px 0 rgba(24,33,43,.35));
+}
+.dragghost svg { width: 100%; height: 100%; }
+.actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.btn {
+  min-height: 52px; padding: 6px 4px;
+  font: inherit; font-weight: 700; font-size: clamp(14px, 4vw, 16px); color: var(--ink);
+  background: var(--panel); border: 3px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 var(--ink);
+  cursor: pointer; touch-action: manipulation; user-select: none;
+  display: grid; place-items: center; line-height: 1.2;
+}
+.btn small { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .06em; }
+.btn:active:not(:disabled), .btn.pressed { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.go { background: var(--accent); color: var(--accent-ink); }
+.btn.go small { color: var(--accent-ink); opacity: .7; }
+.btn.go.ready { animation: ready 1s ease-in-out infinite; }
+@keyframes ready { 50% { box-shadow: 0 4px 0 var(--ink), 0 0 0 5px rgba(255,122,26,.35); } }
+.btn.warn { background: #fdecea; }
+
+/* ---------- result card ---------- */
+.result { padding: 12px; display: grid; gap: 10px; }
+.result h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+.checks { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.checks li { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; padding: 6px 8px; border: 2px solid var(--good); border-radius: 8px; background: #e6f6ec; font-size: 13px; }
+.checks li.no { border-color: var(--bad); background: #fdecea; }
+.checks .mk { grid-row: span 2; font-weight: 700; font-size: 16px; align-self: center; }
+.checks .clue { font-weight: 600; word-break: keep-all; }
+.checks .ans { color: var(--muted); }
+.checks .ans b { color: var(--ink); }
+.free { font-size: 12px; color: var(--muted); margin: 0; }
+.bill { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 14px; font-variant-numeric: tabular-nums; border-top: 2px dashed var(--muted); padding-top: 8px; }
+.bill .minus { color: var(--bad); } .bill .plus { color: var(--good); }
+.bill .total { font-weight: 700; font-size: 16px; border-top: 2px solid var(--ink); padding-top: 4px; }
+
+/* ---------- screens ---------- */
+.screen { padding: 22px 18px; display: grid; gap: 14px; text-align: center; }
+.screen h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(32px, 10.5vw, 46px); line-height: 1.08; text-wrap: balance; }
+.screen h1 em { font-style: normal; color: var(--accent); -webkit-text-stroke: 1.5px var(--ink); }
+.screen .sub { margin: 0; color: var(--muted); font-weight: 600; text-wrap: balance; word-break: keep-all; }
+.screen .hero svg { width: 100%; height: auto; display: block; }
+.rules { margin: 0; padding: 10px 14px; border: 2px dashed var(--muted); border-radius: 10px; font-size: 13px; color: var(--muted); text-align: left; line-height: 1.65; word-break: keep-all; }
+.rules b { color: var(--ink); }
+.rules ol { margin: 0; padding-left: 18px; }
+.screen .btn { min-height: 58px; font-size: 18px; }
+.btns { display: grid; gap: 10px; }
+.big { font-family: var(--font-display); font-size: clamp(40px, 13vw, 58px); line-height: 1; font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats div { border: 2px solid var(--ink); border-radius: 10px; padding: 8px 4px; background: #fff; min-width: 0; }
+.stats b { display: block; font-family: var(--font-display); font-weight: 400; font-size: clamp(18px, 5.5vw, 22px); font-variant-numeric: tabular-nums; }
+.stats span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.reviews { display: grid; gap: 6px; text-align: left; }
+.reviews div { background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: 6px 10px; font-size: 13px; word-break: keep-all; }
+.reviews .stars { font-size: 13px; margin-right: 6px; }
+.progress { height: 14px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
+.progress i { display: block; height: 100%; background: repeating-linear-gradient(135deg, var(--accent) 0 8px, #ff9a4d 8px 16px); }
+.verdict { font-family: var(--font-display); font-size: 22px; padding: 6px 14px; border: 3px solid var(--ink); border-radius: 99px; justify-self: center; background: var(--panel); }
+.verdict.great { background: var(--accent); } .verdict.bad { background: #f6c6c1; }
+
+/* start splash */
+.splash-art { border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; background: #dfe6ec; }
+.splash-art svg { display: block; width: 100%; height: auto; }
+.drive-loop { animation: driveloop 4.2s linear infinite; }
+.drive-loop.b { animation-delay: -2.1s; }
+@keyframes driveloop { from { transform: translateX(-430px); } to { transform: translateX(430px); } }
+.road { animation: road .5s linear infinite; }
+@keyframes road { to { stroke-dashoffset: -32; } }
+.btn.start { min-height: 72px; font-family: var(--font-display); font-weight: 400; font-size: 30px; letter-spacing: .12em; }
+.blink { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .3em; color: var(--muted); animation: blink 1.1s steps(1) infinite; }
+.mini {
+  font: inherit; font-size: 11px; font-weight: 700; color: var(--ink); background: #fff;
+  border: 2px solid var(--ink); border-radius: 99px; padding: 2px 10px; min-height: 26px; cursor: pointer;
+}
+.mini.on { background: var(--accent); }
+.mini:disabled { opacity: .4; cursor: default; }
+.date .right-side { display: flex; align-items: center; gap: 8px; }
+/* unlock ladder */
+.unlocks { display: grid; gap: 6px; text-align: left; }
+.unlocks div { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 6px 10px; border: 2px dashed var(--muted); border-radius: 10px; font-size: 13px; background: #fff; }
+.unlocks div.on { border: 2px solid var(--good); background: #e6f6ec; }
+.unlocks b { font-weight: 700; } .unlocks small { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.unlocks .bar { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: #e3e7eb; overflow: hidden; }
+.unlocks .bar i { display: block; height: 100%; background: var(--accent); }
+.unlocked-news { padding: 8px 10px; border: 3px solid var(--ink); border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 700; text-align: center; animation: docin .4s ease-out; }
+.part.locked { background: #e9ecef; cursor: not-allowed; opacity: 1; }
+.part.locked svg { opacity: .3; filter: grayscale(1); }
+.part.locked .lock { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; background: var(--ink); color: #fff; border-radius: 99px; padding: 1px 6px; white-space: nowrap; }
+.part .prem { position: absolute; top: 2px; right: 6px; font-size: 10px; color: var(--accent); font-weight: 700; }
+
+.flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 50; }
+.flash.good { background: var(--good); animation: flash .4s; }
+.flash.bad { background: var(--bad); animation: flash .45s; }
+@keyframes flash { 0% { opacity: .3; } 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3e7eb"/><stop offset=".5" stop-color="#b9c1c8"/><stop offset="1" stop-color="#8f99a2"/></linearGradient>
+            <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".4"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></linearGradient>
+            <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#26394a"/><stop offset=".55" stop-color="#5c7f96"/><stop offset="1" stop-color="#a3c6d8"/></linearGradient>
+            <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset="1" stop-color="#8e98a2"/></linearGradient>
+            <radialGradient id="soft"><stop offset="0" stop-color="#fff"/><stop offset=".65" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+            <radialGradient id="glow"><stop offset="0" stop-color="#fff7c2"/><stop offset=".4" stop-color="#ffb347"/><stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>
+            <pattern id="hazard" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="14" fill="#f2c21b"/><rect x="7" width="7" height="14" fill="#1b1f24"/></pattern>
+            <mask id="pm" maskUnits="userSpaceOnUse" x="-60" y="-60" width="520" height="300"><g id="pmDots"></g></mask>
+          </defs>
+</svg>
+<div class="app" id="app">
+  <section class="card screen" id="screen"></section>
+
+  <div id="game" hidden>
+    <header class="card hud">
+      <div class="date"><span id="dateVal">1월 1일 · 겨울</span><span class="right-side"><span id="dayVal">영업 1일째 / 365</span><button class="mini" type="button" id="closeBtn">조기 마감</button></span></div>
+      <div><div class="lbl">통장</div><div class="val" id="moneyVal">0원</div></div>
+      <div class="right"><div class="lbl">손님</div><div class="val" id="custVal">1/10</div></div>
+      <div class="right rating" id="ratingBox"><div class="lbl">가게 평점</div><div class="val" id="ratingVal">★4.0</div></div>
+    </header>
+
+    <section class="card counter" id="counter">
+      <div class="cust-row">
+        <div class="face" id="face"></div>
+        <div class="bubble" id="bubble" aria-live="polite"><p class="say" id="say"></p><div class="stars" id="custStars" hidden></div></div>
+      </div>
+      <div class="quote" id="quoteRow" hidden>
+        <span>예정가 <b id="quoteVal">0원</b></span>
+        <div class="gauge" id="gauge"><i id="gaugeFill"></i></div>
+        <span id="tipVal">빠른 팁 0초</span>
+      </div>
+    </section>
+
+    <section class="card bay">
+      <div class="line" id="line"></div>
+      <div class="stagebox" id="stagebox">
+        <svg id="scene" viewBox="0 0 400 230" aria-label="작업장">
+          <g id="bg"></g>
+          <g id="custLayer"></g>
+          <g id="carMove" style="transition: transform .55s cubic-bezier(.5,0,.3,1)"><g id="carG" transform="translate(40 70) scale(.8)"></g></g>
+          <g id="fg"></g>
+          <g id="fx"></g>
+        </svg>
+        <div id="overlay"></div>
+      </div>
+      <div class="meter" id="meter" hidden><i id="meterFill"></i></div>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <section class="card shelf" id="shelf">
+      <h4><span id="shelfTitle">부품 선반</span><span>끌어서 놓거나 눌러서 장착</span></h4>
+      <div class="tray" id="tray"></div>
+      <div class="actions">
+        <button class="btn warn" type="button" id="scrapBtn">폐차 <small>Backspace</small></button>
+        <button class="btn go" type="button" id="mainBtn">다음 <small>Enter</small></button>
+      </div>
+    </section>
+
+    <section class="card result" id="result" hidden></section>
+  </div>
+</div>
+<div class="flash" id="flash"></div>
+
+<script>
+(() => {
+  // ================= rules =================
+  const YEAR = 365, PER_DAY = 5, CLOSE_BELOW = 2.5, SCRAP_COST = 500;
+  const CUT_PER_MISS = 0.35, TIP_RATE = 0.2, REVIEW_WINDOW = 30;
+  const WELD_DONE = 0.9, PAINT_DONE = 0.88;
+  const SAVE_KEY = 'good-car-great-car/v2';
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  const LABEL = {
+    body:  { sedan: '세단', suv: 'SUV', truck: '트럭', coupe: '쿠페', van: '밴', supercar: '슈퍼카', limo: '리무진', camper: '캠핑카' },
+    roof:  { hard: '일반 지붕', sunroof: '선루프', open: '오픈탑' },
+    color: { red: '빨강', orange: '주황', yellow: '노랑', green: '초록', blue: '파랑', white: '흰색', black: '검정', silver: '은색', gold: '금색' },
+    wheel: { normal: '일반', offroad: '오프로드', racing: '레이싱', mixed: '짝짝이' },
+    extra: { none: '없음', rack: '루프랙', spoiler: '스포일러' },
+  };
+  const ATTR = { body: '차체 모양', roof: '지붕', color: '색상', wheel: '바퀴', extra: '장식' };
+  const SUBJ = { body: '차체 모양이', roof: '지붕이', color: '색이', wheel: '바퀴가', extra: '장식이' };
+  const ORDER_ATTRS = ['body', 'roof', 'color', 'wheel', 'extra'];
+  const PAINT = { red: '#d8342a', orange: '#ee7d1b', yellow: '#f2c21b', green: '#2c8f4c', blue: '#2763c9', white: '#f4f5f2', black: '#25292f', silver: '#b4bcc5', gold: '#c99a1e' };
+
+  // Asset-based unlocks: reaching the bank balance unlocks the part for good.
+  // PREMIUM is what the option adds to a car's price when the customer asks for it
+  // (or half of it as an upgrade fee when the customer left that choice to you).
+  const UNLOCKS = [
+    { id: 'supercar', attr: 'body',  need: 40000,  name: '슈퍼카 금형' },
+    { id: 'silver',   attr: 'color', need: 80000,  name: '은색 메탈릭 도료' },
+    { id: 'limo',     attr: 'body',  need: 150000, name: '리무진 금형' },
+    { id: 'gold',     attr: 'color', need: 250000, name: '금색 펄 도료' },
+    { id: 'camper',   attr: 'body',  need: 400000, name: '캠핑카 금형' },
+  ];
+  const PREMIUM = { supercar: 4000, silver: 1500, limo: 6000, gold: 2500, camper: 9000 };
+  const LOCKABLE = new Set(UNLOCKS.map(u => u.id));
+  const isUnlocked = v => !LOCKABLE.has(v) || (G && G.unlocked.includes(v));
+
+  const STATIONS = [
+    { id: 'press', name: '프레스', sub: 'PRESS', shelf: '금형 선반' },
+    { id: 'body',  name: '차체',   sub: 'BODY',  shelf: '지붕 패널' },
+    { id: 'paint', name: '도장',   sub: 'PAINT', shelf: '도료 캔' },
+    { id: 'trim',  name: '의장',   sub: 'TRIM',  shelf: '바퀴 · 장식' },
+  ];
+
+  // ================= car models =================
+  // Side profiles, front facing right, ground at y=150, drawn on a 400×170 board.
+  // Proportions follow real reference cars (length/height, wheelbase/length):
+  // sedan ≈ Sonata 3.4 / .58, SUV ≈ Santa Fe 2.8 / .58, pickup ≈ F-150 3.0 / .61, coupe ≈ 4 Series 3.4 / .60, minivan ≈ Carnival 2.9 / .60.
+  const CARS = {
+    sedan: {
+      r: 24, axle: 126, wx: [92, 312], top: 48, belt: 92,
+      lower: 'M22 130 L22 108 Q22 94 36 92 L262 90 Q330 92 362 100 Q378 104 378 116 L378 130 Q378 136 370 136 L340 136 A30 30 0 1 0 284 136 L120 136 A30 30 0 1 0 64 136 L36 136 Q22 136 22 130 Z',
+      green: 'M64 92 Q100 56 140 50 L200 48 Q222 49 236 58 L266 91 Z',
+      glass: 'M84 90 Q112 62 142 56 L198 54 Q216 55 227 63 L252 90 Z',
+      pillars: [[160, 8]],
+      seams: 'M122 94 V128 M166 92 V134 M256 92 V126', handles: [[136, 100], [222, 100]],
+      head: 'M352 101 Q368 103 375 110 L362 112 Q352 108 352 101 Z', tail: 'M22 100 L34 99 L34 108 L22 110 Z',
+      grille: 'M370 118 L378 118 L378 126 L370 126 Z', mirror: 'M246 88 Q252 81 259 85 L257 91 Z',
+      crease: 'M28 106 Q200 100 372 110', rack: [134, 206], roofY: 48, seam: [64, 266, 91],
+      spoiler: [24, 92, 44], sun: [150, 196],
+      shield: 'M262 91 L238 62 L244 61 L268 91 Z', seats: [[150, 66], [202, 66]], fold: [66, 82, 50],
+    },
+    suv: {
+      r: 27, axle: 123, wx: [94, 306], top: 28, belt: 80,
+      lower: 'M20 128 L20 86 Q20 80 28 80 L270 78 Q340 78 368 84 Q380 88 380 100 L380 128 Q380 134 372 134 L337 134 A33 33 0 1 0 275 134 L125 134 A33 33 0 1 0 63 134 L28 134 Q20 134 20 128 Z',
+      green: 'M24 80 L30 33 Q32 28 40 28 L222 28 Q236 29 244 36 L276 79 Z',
+      glass: 'M38 78 L43 37 L220 35 Q232 36 238 43 L264 78 Z',
+      pillars: [[104, 8], [166, 8]],
+      seams: 'M114 82 V130 M170 80 V132 M262 80 V126', handles: [[128, 88], [214, 88]],
+      head: 'M356 86 Q372 88 378 96 L364 98 Q356 94 356 86 Z', tail: 'M20 84 L30 84 L30 100 L20 100 Z',
+      grille: 'M368 100 L380 100 L380 116 L368 116 Z', mirror: 'M252 76 Q258 69 265 73 L263 80 Z',
+      crease: 'M26 98 Q200 94 374 102', rack: [48, 218], roofY: 28, seam: [24, 276, 79],
+      spoiler: [24, 28, 40], sun: [120, 180],
+      shield: 'M276 79 L246 40 L252 39 L282 79 Z', seats: [[150, 50], [212, 50]], fold: [30, 70, 56],
+    },
+    truck: {
+      r: 27, axle: 123, wx: [92, 312], top: 30, belt: 80,
+      lower: 'M18 128 L18 82 Q18 78 22 78 L176 78 L178 80 L272 80 Q340 80 368 86 Q382 90 382 102 L382 128 Q382 134 374 134 L343 134 A33 33 0 1 0 281 134 L123 134 A33 33 0 1 0 61 134 L26 134 Q18 134 18 128 Z',
+      green: 'M182 80 L184 35 Q185 30 191 30 L238 30 Q249 31 255 38 L280 80 Z',
+      glass: 'M192 78 L194 38 L236 37 Q245 38 250 45 L270 78 Z',
+      pillars: [[204, 6]],
+      seams: 'M178 80 V130 M272 82 V126 M24 82 V126 M20 80 H176', handles: [[240, 90]],
+      head: 'M360 88 Q376 90 380 98 L366 100 Q360 96 360 88 Z', tail: 'M18 84 L26 84 L26 98 L18 98 Z',
+      grille: 'M370 102 L382 102 L382 118 L370 118 Z', mirror: 'M262 78 Q268 71 275 75 L273 82 Z',
+      crease: 'M24 100 H176 M180 100 Q280 98 376 104', rack: [190, 240], roofY: 30, seam: [182, 280, 80],
+      spoiler: [20, 78, 34], sun: [200, 232],
+      shield: 'M280 80 L252 42 L258 41 L286 80 Z', seats: [[214, 54]], fold: [186, 72, 22],
+    },
+    coupe: {
+      r: 24, axle: 126, wx: [94, 310], top: 52, belt: 96,
+      lower: 'M22 130 L22 108 Q22 98 34 96 L258 94 Q330 96 364 104 Q380 108 380 120 L380 132 Q380 138 372 138 L337 138 A30 30 0 1 0 283 138 L121 138 A30 30 0 1 0 67 138 L32 138 Q22 138 22 130 Z',
+      green: 'M40 96 Q100 58 160 52 L196 52 Q218 54 232 64 L262 95 Z',
+      glass: 'M74 94 Q112 66 160 59 L194 58 Q212 60 224 68 L248 94 Z',
+      pillars: [[116, 6]],
+      seams: 'M126 98 V132 M252 96 V128', handles: [[200, 104]],
+      head: 'M352 104 Q370 106 377 114 L362 116 Q352 112 352 104 Z', tail: 'M22 102 L36 100 L36 110 L22 112 Z',
+      grille: '', mirror: 'M242 92 Q248 85 254 89 L252 95 Z',
+      crease: 'M28 112 Q200 106 374 116', rack: [148, 204], roofY: 52, seam: [40, 262, 95],
+      spoiler: [24, 96, 46], sun: [156, 194],
+      shield: 'M262 95 L236 64 L242 63 L268 95 Z', seats: [[170, 72], [208, 72]], fold: [62, 86, 50],
+    },
+    van: {
+      r: 26, axle: 124, wx: [92, 304], top: 24, belt: 82,
+      lower: 'M18 128 L18 86 Q18 82 24 82 L290 80 Q350 82 372 92 Q382 96 382 108 L382 128 Q382 135 374 135 L334 135 A32 32 0 1 0 274 135 L122 135 A32 32 0 1 0 62 135 L26 135 Q18 135 18 128 Z',
+      green: 'M22 82 L26 30 Q28 24 36 24 L236 24 Q252 25 262 34 L300 81 Z',
+      glass: 'M34 80 L38 32 L234 31 Q248 32 256 40 L288 80 Z',
+      pillars: [[90, 6], [160, 6], [226, 6]],
+      seams: 'M164 84 V130 M232 82 V128 M100 86 H164', handles: [[150, 92], [216, 92]],
+      head: 'M358 90 Q374 94 380 102 L366 104 Q358 98 358 90 Z', tail: 'M18 86 L26 86 L26 104 L18 104 Z',
+      grille: 'M370 108 L382 108 L382 120 L370 120 Z', mirror: 'M286 78 Q292 71 299 75 L297 82 Z',
+      crease: 'M24 104 Q200 100 376 108', rack: [44, 230], roofY: 24, seam: [22, 300, 81],
+      spoiler: [22, 24, 40], sun: [110, 200],
+      shield: 'M300 81 L262 38 L268 37 L306 81 Z', seats: [[120, 52], [190, 52], [252, 52]], fold: [26, 68, 60],
+    },
+    // premium bodies: supercar ≈ mid-engine wedge (L/H 4.4), limo = stretched sedan, camper = class-C motorhome
+    supercar: {
+      r: 24, axle: 126, wx: [96, 300], top: 68, belt: 100,
+      lower: 'M22 128 L22 112 Q22 104 34 102 L250 96 Q320 100 366 112 Q380 116 380 124 L380 132 Q380 138 372 138 L327 138 A30 30 0 1 0 273 138 L123 138 A30 30 0 1 0 69 138 L32 138 Q22 138 22 128 Z',
+      green: 'M70 102 Q120 74 170 68 L210 68 Q236 70 256 84 L282 98 Z',
+      glass: 'M104 100 Q136 78 172 74 L208 74 Q228 76 244 86 L264 98 Z',
+      pillars: [[150, 5]],
+      seams: 'M140 104 V134 M262 100 V130', handles: [[214, 108]],
+      head: 'M350 108 Q370 112 378 120 L360 120 Q350 116 350 108 Z', tail: 'M22 106 L36 105 L36 112 L22 114 Z',
+      grille: 'M112 112 L138 107 L138 122 L116 124 Z', mirror: 'M258 92 Q264 85 270 89 L268 95 Z',
+      crease: 'M28 118 Q200 110 374 124', rack: [160, 206], roofY: 68, seam: [70, 282, 99],
+      spoiler: [24, 102, 46], sun: [164, 204],
+      shield: 'M282 98 L254 74 L260 73 L288 98 Z', seats: [[184, 82], [222, 82]], fold: [82, 92, 44],
+    },
+    limo: {
+      r: 23, axle: 127, wx: [80, 334], top: 52, belt: 94,
+      lower: 'M14 131 L14 110 Q14 96 28 94 L296 92 Q352 94 374 102 Q386 106 386 118 L386 131 Q386 137 378 137 L361 137 A29 29 0 1 0 307 137 L107 137 A29 29 0 1 0 53 137 L28 137 Q14 137 14 131 Z',
+      green: 'M50 94 Q80 60 116 54 L248 52 Q262 53 272 61 L300 93 Z',
+      glass: 'M66 92 Q90 66 118 60 L246 58 Q258 59 266 66 L288 92 Z',
+      pillars: [[110, 6], [170, 6], [226, 6]],
+      seams: 'M104 96 V130 M172 94 V134 M230 94 V134 M290 94 V128', handles: [[150, 102], [208, 102], [264, 102]],
+      head: 'M362 103 Q378 105 384 112 L372 114 Q362 110 362 103 Z', tail: 'M14 102 L26 101 L26 110 L14 112 Z',
+      grille: 'M378 118 L386 118 L386 128 L378 128 Z', mirror: 'M282 90 Q288 83 295 87 L293 93 Z',
+      crease: 'M20 108 Q200 102 382 112', rack: [120, 244], roofY: 52, seam: [50, 300, 93],
+      spoiler: [16, 94, 40], sun: [140, 230],
+      shield: 'M300 93 L274 63 L280 62 L306 93 Z', seats: [[130, 68], [190, 68], [250, 68]], fold: [56, 84, 50],
+    },
+    camper: {
+      r: 28, axle: 122, wx: [104, 300], top: 14, belt: 42,
+      lower: 'M16 128 L16 42 L330 42 L330 70 Q360 74 376 86 Q384 92 384 104 L384 128 Q384 134 376 134 L332 134 A34 34 0 1 0 268 134 L136 134 A34 34 0 1 0 72 134 L26 134 Q16 134 16 128 Z',
+      green: 'M16 42 L16 24 Q16 14 28 14 L300 14 Q318 14 326 24 L332 42 Z',
+      glass: 'M40 22 L100 22 L100 34 L40 34 Z',
+      wins: 'M50 56 L118 56 L118 82 L50 82 Z M140 56 L196 56 L196 82 L140 82 Z M334 74 Q352 78 364 88 L334 88 Z',
+      pillars: [],
+      seams: 'M226 50 V128 M258 50 V128 M330 70 V128', handles: [[248, 88]],
+      head: 'M366 94 Q380 98 384 106 L370 108 Q366 102 366 94 Z', tail: 'M16 92 L24 92 L24 112 L16 112 Z',
+      grille: 'M374 110 L384 110 L384 122 L374 122 Z', mirror: 'M326 66 Q332 59 339 63 L337 70 Z',
+      crease: 'M20 100 H380', rack: [40, 300], roofY: 14, seam: [16, 332, 42],
+      spoiler: [18, 14, 40], sun: [140, 220],
+      shield: 'M332 42 L320 24 L326 23 L338 42 Z', seats: [[120, 26], [200, 26]], fold: [30, 30, 50],
+    },
+  };
+  const INK = '#1b1f24';
+
+  function wheelInner(type, r) {
+    if (type === 'offroad') {
+      const R = r + 4;
+      let h = `<circle r="${R}" fill="#15171a"/><circle r="${R - 2}" fill="none" stroke="#33383e" stroke-width="4" stroke-dasharray="5 3"/>`;
+      h += `<circle r="${R * .74}" fill="#24272b"/><circle r="${R * .52}" fill="#3d4349" stroke="#16191c" stroke-width="1.5"/>`;
+      for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; h += `<circle cx="${(Math.cos(a) * R * .33).toFixed(1)}" cy="${(Math.sin(a) * R * .33).toFixed(1)}" r="${R * .07}" fill="#16191c"/>`; }
+      return h + `<circle r="${R * .14}" fill="#8a9198"/>`;
+    }
+    if (type === 'racing') {
+      let h = `<circle r="${r}" fill="#111316"/><circle r="${r * .8}" fill="#1d2024" stroke="#d4a514" stroke-width="2"/>`;
+      h += `<rect x="${r * .22}" y="${-r * .36}" width="${r * .2}" height="${r * .72}" rx="2" fill="#d63a2f"/>`;
+      for (let k = 0; k < 10; k++) h += `<rect x="-1" y="${-r * .76}" width="2" height="${r * .76}" fill="#d4a514" transform="rotate(${k * 36})"/>`;
+      return h + `<circle r="${r * .16}" fill="#d4a514" stroke="#1d2024" stroke-width="1"/>`;
+    }
+    let h = `<circle r="${r}" fill="#1c1f23"/><circle r="${r - 2}" fill="none" stroke="#353a40" stroke-width="2"/><circle r="${r * .64}" fill="url(#chrome)" stroke="#6f7881" stroke-width="1.5"/>`;
+    for (let k = 0; k < 5; k++) h += `<rect x="-2.6" y="${-r * .62}" width="5.2" height="${r * .62}" rx="2.4" fill="#7f8992" transform="rotate(${k * 72})"/>`;
+    return h + `<circle r="${r * .17}" fill="#5f6870"/>`;
+  }
+
+  // s = { body, roof, base, top, welded, ghostRoof, seam, wheels:[rear,front], extra, slots }
+  function carMarkup(s) {
+    const c = CARS[s.body];
+    if (!c) return '';
+    const hasRoof = s.roof && s.roof !== 'open';
+    const wheels = s.wheels || [null, null];
+    const lift = wheels.includes('offroad') ? 4 : 0;
+    const baseFill = s.base ? PAINT[s.base] : 'url(#metal)';
+    const shell = (fill, stroke) => `${hasRoof ? `<path data-paint d="${c.green}" fill="${fill}"${stroke ? ` stroke="${INK}" stroke-width="2"` : ''}/>` : ''}<path data-paint d="${c.lower}" fill="${fill}"${stroke ? ` stroke="${INK}" stroke-width="2"` : ''}/>`;
+    const pillars = fill => hasRoof ? c.pillars.map(([x, w]) => `<rect x="${x}" y="${c.top + 1}" width="${w}" height="${c.belt - c.top - 1}" fill="${fill}"/>`).join('') : '';
+    let h = '';
+    // stands hold the shell until wheels go on
+    c.wx.forEach((x, i) => {
+      if (wheels[i]) return;
+      h += `<path d="M${x - 11} 150 L${x - 4} ${c.axle - 4} L${x + 4} ${c.axle - 4} L${x + 11} 150 Z" fill="#7a8590" stroke="${INK}" stroke-width="1.5"/>`;
+      if (s.slots) h += `<circle cx="${x}" cy="${c.axle}" r="${c.r}" fill="rgba(255,122,26,.1)" stroke="#ff7a1a" stroke-width="2" stroke-dasharray="5 4" class="seamhint"/>`;
+    });
+    h += `<g transform="translate(0 ${-lift})">`;
+    if (s.roof === 'open') {
+      c.seats.forEach(([x, y]) => { h += `<rect x="${x - 7}" y="${y}" width="14" height="13" rx="5" fill="#2b2f35"/><rect x="${x - 9}" y="${y + 11}" width="18" height="${c.belt - y - 9}" rx="3" fill="#3a3f46"/>`; });
+      const [fx, fy, fw] = c.fold;
+      h += `<rect x="${fx}" y="${fy}" width="${fw}" height="10" rx="5" fill="#2b2f35"/><path d="M${fx + 8} ${fy + 2} V${fy + 8} M${fx + fw / 2} ${fy + 2} V${fy + 8} M${fx + fw - 8} ${fy + 2} V${fy + 8}" stroke="#4a5059" stroke-width="1.5"/>`;
+      h += `<path d="${c.shield}" fill="url(#glass)" stroke="${INK}" stroke-width="1.5"/>`;
+    }
+    if (!s.roof && s.ghostRoof) h += `<path d="${c.green}" fill="rgba(255,122,26,.1)" stroke="#ff7a1a" stroke-width="2" stroke-dasharray="6 5" class="seamhint"/>`;
+    h += shell(baseFill, true);
+    if (s.top) h += `<g mask="url(#pm)">${shell(PAINT[s.top])}</g>`;
+    h += `${hasRoof ? `<path d="${c.green}" fill="url(#shade)"/>` : ''}<path d="${c.lower}" fill="url(#shade)"/>`;
+    if (hasRoof) {
+      h += `<path d="${c.glass}" fill="url(#glass)" stroke="${INK}" stroke-width="1.5"/>`;
+      h += pillars(baseFill);
+      if (s.top) h += `<g mask="url(#pm)">${pillars(PAINT[s.top])}</g>`;
+    }
+    if (c.wins) h += `<path d="${c.wins}" fill="url(#glass)" stroke="${INK}" stroke-width="1.5"/>`;
+    h += `<path d="${c.crease}" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.5"/>`;
+    h += `<path d="${c.seams}" fill="none" stroke="rgba(15,18,22,.45)" stroke-width="1.4"/>`;
+    h += c.handles.map(([x, y]) => `<rect x="${x}" y="${y}" width="14" height="3" rx="1.5" fill="rgba(15,18,22,.55)"/>`).join('');
+    if (c.grille) h += `<path d="${c.grille}" fill="#22262b" stroke="${INK}" stroke-width="1"/>`;
+    h += `<path d="${c.head}" fill="#fff6cf" stroke="${INK}" stroke-width="1.2"/><path d="${c.tail}" fill="#c9261d" stroke="${INK}" stroke-width="1.2"/>`;
+    h += `<path d="${c.mirror}" fill="#2b2f35" stroke="${INK}" stroke-width="1"/>`;
+    if (s.roof === 'sunroof') h += `<rect x="${c.sun[0]}" y="${c.roofY - 3}" width="${c.sun[1] - c.sun[0]}" height="5" rx="2" fill="#2c4152" stroke="${INK}" stroke-width="1.2"/>`;
+    if (s.roof && s.seam) {
+      const [x1, x2, y] = c.seam;
+      h += s.welded
+        ? `<path d="M${x1 + 4} ${y} H${x2 - 4}" stroke="#7d848c" stroke-width="2.2" stroke-dasharray="2 2"/>`
+        : `<path d="M${x1 + 4} ${y} H${x2 - 4}" stroke="#ff7a1a" stroke-width="3" stroke-dasharray="6 3" class="seamhint"/>`;
+    }
+    h += '<g id="beads"></g>';
+    if (s.extra === 'rack') {
+      const [x1, x2] = c.rack, y = c.roofY;
+      h += `<rect x="${x1}" y="${y - 9}" width="${x2 - x1}" height="4" rx="2" fill="#2b2f35"/><rect x="${x1 + 5}" y="${y - 6}" width="4" height="6" fill="#2b2f35"/><rect x="${x2 - 9}" y="${y - 6}" width="4" height="6" fill="#2b2f35"/>`;
+      for (let x = x1 + 18; x < x2 - 12; x += 28) h += `<rect x="${x}" y="${y - 11}" width="3" height="8" rx="1" fill="#3a4048"/>`;
+    }
+    if (s.extra === 'spoiler') {
+      const [x, y, w] = c.spoiler;
+      h += `<rect x="${x + 6}" y="${y - 12}" width="3" height="12" fill="#23272c"/><rect x="${x + w - 9}" y="${y - 12}" width="3" height="12" fill="#23272c"/><path d="M${x - 2} ${y - 12} L${x + w} ${y - 16} L${x + w + 2} ${y - 11} L${x} ${y - 9} Z" fill="#23272c" stroke="${INK}" stroke-width="1"/>`;
+    }
+    c.wx.forEach((x, i) => {
+      if (wheels[i]) h += `<g transform="translate(${x} ${c.axle})"><g class="wh" data-i="${i}">${wheelInner(wheels[i], c.r)}</g></g>`;
+    });
+    return h + '</g>';
+  }
+
+  // ================= people =================
+  const SKINS = ['#f6d5b8', '#eec39a', '#d9a77c', '#b97f55', '#8d5a3b'];
+  const HAIRS = ['#2a211c', '#5b3a26', '#a46b3a', '#d9b26b', '#9a9a9a', '#c94f2f'];
+  const SHIRTS = ['#2f6fde', '#d63a2f', '#1f9d55', '#7a4fd1', '#f2a516', '#2a2f36', '#e86fa0', '#1c8c9c'];
+  const PANTS = ['#2b3a55', '#3a3f46', '#6b5a45', '#1f2a35'];
+  const STYLES = ['short', 'long', 'bald', 'cap', 'bun'];
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const newPerson = () => ({ skin: pick(SKINS), hair: pick(HAIRS), shirt: pick(SHIRTS), pants: pick(PANTS), style: pick(STYLES) });
+
+  // feet at (0,0), about 120 units tall, facing left
+  function personMarkup(p, mood) {
+    const hair = {
+      short: `<path d="M-13 -103 Q-14 -117 0 -117 Q13 -117 13 -105 Q6 -111 -2 -110 Q-9 -110 -13 -103Z" fill="${p.hair}"/>`,
+      long: `<path d="M-14 -100 Q-15 -118 0 -118 Q15 -118 14 -100 L14 -84 L6 -84 L7 -105 Q0 -111 -8 -105 L-8 -96 L-14 -96 Z" fill="${p.hair}"/>`,
+      bald: `<path d="M12 -110 Q14 -101 10 -95" stroke="${p.hair}" stroke-width="3" fill="none"/>`,
+      cap: `<path d="M-13 -106 Q-12 -120 1 -119 Q13 -118 13 -106 Z" fill="${p.shirt}" stroke="${INK}" stroke-width="1"/><path d="M-13 -106 L-24 -104 L-13 -102 Z" fill="${p.shirt}" stroke="${INK}" stroke-width="1"/>`,
+      bun: `<circle cx="9" cy="-116" r="5" fill="${p.hair}"/><path d="M-13 -103 Q-14 -117 0 -117 Q13 -117 13 -105 Q6 -111 -2 -110 Q-9 -110 -13 -103Z" fill="${p.hair}"/>`,
+    }[p.style];
+    const mouth = mood === 'happy' ? `<path d="M-9 -97 Q-4 -91 1 -97" stroke="${INK}" stroke-width="1.6" fill="#fff"/>`
+      : mood === 'angry' ? `<path d="M-8 -94 Q-4 -98 0 -94" stroke="${INK}" stroke-width="1.6" fill="none"/>`
+      : `<path d="M-7 -96 H-1" stroke="${INK}" stroke-width="1.6"/>`;
+    const brows = mood === 'angry' ? `<path d="M-10 -110 L-4 -108 M0 -108 L5 -110" stroke="${INK}" stroke-width="1.8"/>` : '';
+    const armL = mood === 'happy' ? `<rect x="-24" y="-118" width="8" height="34" rx="4" fill="${p.shirt}" transform="rotate(20 -20 -86)"/><circle cx="-29" cy="-118" r="4.5" fill="${p.skin}"/>`
+      : `<rect x="-23" y="-86" width="8" height="36" rx="4" fill="${p.shirt}"/><circle cx="-19" cy="-49" r="4.5" fill="${p.skin}"/>`;
+    return `<g>
+      <rect x="-11" y="-46" width="9" height="44" rx="3" fill="${p.pants}"/><rect x="2" y="-46" width="9" height="44" rx="3" fill="${p.pants}"/>
+      <rect x="-15" y="-5" width="13" height="5" rx="2" fill="#2b2f35"/><rect x="0" y="-5" width="13" height="5" rx="2" fill="#2b2f35"/>
+      <rect x="15" y="-86" width="8" height="36" rx="4" fill="${p.shirt}" style="filter: brightness(.85)"/><circle cx="19" cy="-49" r="4.5" fill="${p.skin}"/>
+      <path d="M-17 -44 L-15 -82 Q-14 -91 -4 -91 L4 -91 Q14 -91 15 -82 L17 -44 Z" fill="${p.shirt}" stroke="${INK}" stroke-width="1.2"/>
+      ${armL}
+      <rect x="-4" y="-94" width="8" height="6" fill="${p.skin}"/>
+      <circle cx="0" cy="-103" r="13" fill="${p.skin}" stroke="${INK}" stroke-width="1.2"/>
+      ${hair}
+      <circle cx="-7" cy="-104" r="1.6" fill="${INK}"/><circle cx="1" cy="-104" r="1.6" fill="${INK}"/>
+      ${brows}${mouth}
+    </g>`;
+  }
+  const avatarSvg = (p, mood) => `<svg viewBox="-24 -124 48 48" aria-hidden="true">${personMarkup(p, mood)}</svg>`;
+
+  // ================= scenes =================
+  function sceneMarkup(kind) {
+    const floor = (fill, line) => `<rect y="190" width="400" height="40" fill="${fill}"/><path d="M0 190 H400" stroke="${INK}" stroke-width="2"/>` +
+      Array.from({ length: 9 }, (_, i) => `<path d="M${i * 50 + 10} 190 L${i * 50 - 10} 230" stroke="${line}" stroke-width="1.5"/>`).join('');
+    if (kind === 'showroom') return { bg: `
+      <rect width="400" height="190" fill="#e9edf0"/>
+      <rect x="16" y="22" width="190" height="118" fill="#cfe4ef" stroke="#7d8b97" stroke-width="3"/>
+      <path d="M79 22 V140 M142 22 V140 M16 80 H206" stroke="#7d8b97" stroke-width="3"/>
+      <path d="M30 60 L60 30 M100 120 L150 70" stroke="#fff" stroke-width="4" opacity=".6"/>
+      <rect x="232" y="18" width="150" height="30" rx="4" fill="${INK}"/>
+      <text x="307" y="39" text-anchor="middle" font-family="Black Han Sans, sans-serif" font-size="15" fill="#ff7a1a">좋은 차 위대한 차</text>
+      <rect x="340" y="132" width="56" height="58" fill="#8a5a3b" stroke="${INK}" stroke-width="2"/><rect x="336" y="126" width="64" height="8" fill="#6b4329" stroke="${INK}" stroke-width="2"/>
+      <path d="M232 190 L232 150 Q226 136 236 128 Q232 146 240 150 L240 190" fill="#2c8f4c"/>
+      ${floor('#d7dce0', '#c3c9ce')}`, fg: '' };
+    if (kind === 'press') return { bg: `
+      <rect width="400" height="190" fill="#dfe3e7"/>
+      <rect x="10" y="10" width="28" height="180" fill="#5d6874" stroke="${INK}" stroke-width="2"/><rect x="362" y="10" width="28" height="180" fill="#5d6874" stroke="${INK}" stroke-width="2"/>
+      <rect x="22" y="180" width="356" height="10" fill="#4b5560" stroke="${INK}" stroke-width="2"/>
+      <rect x="22" y="186" width="356" height="4" fill="url(#hazard)"/>
+      <rect id="sheet" x="76" y="168" width="248" height="8" fill="url(#metal)" stroke="${INK}" stroke-width="1.5"/>
+      ${floor('#c9cfd4', '#b5bcc2')}`, fg: `
+      <rect x="4" y="0" width="392" height="30" fill="#4b5560" stroke="${INK}" stroke-width="2"/>
+      <text x="200" y="20" text-anchor="middle" font-family="Black Han Sans, sans-serif" font-size="12" fill="#f2c21b" letter-spacing="3">PRESS 800T</text>
+      <g id="ram">
+        <rect x="120" y="-60" width="10" height="100" fill="#9aa3ab"/><rect x="270" y="-60" width="10" height="100" fill="#9aa3ab"/>
+        <rect x="44" y="34" width="312" height="34" fill="#6b7682" stroke="${INK}" stroke-width="2"/>
+        <rect x="44" y="62" width="312" height="8" fill="url(#hazard)" stroke="${INK}" stroke-width="1.5"/>
+      </g>` };
+    if (kind === 'body') return { bg: `
+      <rect width="400" height="190" fill="#e2e6ea"/>
+      <rect x="0" y="0" width="400" height="14" fill="#3a434c"/>
+      ${[60, 200, 340].map(x => `<rect x="${x - 26}" y="14" width="52" height="5" fill="#fff6c2"/>`).join('')}
+      <g stroke="${INK}" stroke-width="2">
+        <rect x="0" y="150" width="34" height="40" fill="#4b5560"/><path d="M17 150 L44 98 L84 84" stroke="#f2a516" stroke-width="11" stroke-linecap="round" fill="none"/>
+        <circle cx="44" cy="98" r="6" fill="#4b5560"/><circle cx="17" cy="150" r="7" fill="#4b5560"/>
+        <rect x="366" y="150" width="34" height="40" fill="#4b5560"/><path d="M383 150 L356 98 L316 84" stroke="#f2a516" stroke-width="11" stroke-linecap="round" fill="none"/>
+        <circle cx="356" cy="98" r="6" fill="#4b5560"/><circle cx="383" cy="150" r="7" fill="#4b5560"/>
+      </g>
+      <rect x="70" y="182" width="260" height="8" fill="#5b6670" stroke="${INK}" stroke-width="1.5"/>
+      ${floor('#c9cfd4', '#b5bcc2')}`, fg: '' };
+    if (kind === 'paint') return { bg: `
+      <rect width="400" height="190" fill="#eef1f3"/>
+      <rect x="0" y="0" width="400" height="16" fill="#d2d8dd"/>
+      ${[40, 120, 200, 280, 360].map(x => `<rect x="${x - 30}" y="4" width="60" height="8" rx="2" fill="#fffbe6" stroke="#c6ccd1"/>`).join('')}
+      ${Array.from({ length: 13 }, (_, i) => `<path d="M${i * 32 + 6} 26 V176" stroke="#dfe4e8" stroke-width="10"/>`).join('')}
+      <rect y="176" width="400" height="14" fill="#9aa3ab"/>${Array.from({ length: 40 }, (_, i) => `<path d="M${i * 10} 176 V190" stroke="#7d868f" stroke-width="2"/>`).join('')}
+      ${floor('#b8c0c7', '#a3acb4')}`, fg: '' };
+    return { bg: `
+      <rect width="400" height="190" fill="#e4e7ea"/>
+      <rect x="250" y="26" width="130" height="70" fill="#c3a57e" stroke="${INK}" stroke-width="2"/>
+      ${[270, 300, 330, 358].map((x, i) => `<path d="M${x} 36 V${70 + i * 4}" stroke="#3a434c" stroke-width="5" stroke-linecap="round"/>`).join('')}
+      <g opacity=".85">${[150, 132, 114].map(y => `<ellipse cx="34" cy="${y}" rx="24" ry="9" fill="#2b2f35" stroke="${INK}"/>`).join('')}
+      <rect x="10" y="150" width="48" height="40" fill="#2b2f35" stroke="${INK}"/></g>
+      <rect x="70" y="182" width="260" height="8" fill="#5b6670" stroke="${INK}" stroke-width="1.5"/>
+      ${floor('#c9cfd4', '#b5bcc2')}`, fg: '' };
+  }
+
+  // ================= customer lines =================
+  // [tier, text, constraints, season?] — tier 1 says it plainly, 2 hints, 3 is a riddle. Each constraint lists every accepted answer.
+  const ALL_COLORS = Object.keys(LABEL.color);
+  const except = (...xs) => ALL_COLORS.filter(c => !xs.includes(c));
+  const BANK = [
+    [1, '세단으로 주세요.', { body: ['sedan'] }], [1, 'SUV 하나 뽑으러 왔어요.', { body: ['suv'] }], [1, '트럭이 필요해요.', { body: ['truck'] }],
+    [1, '쿠페로 해 주세요.', { body: ['coupe'] }], [1, '승합차, 그러니까 밴이요.', { body: ['van'] }],
+    [2, '택시처럼 점잖은 모양이면 좋겠어요.', { body: ['sedan'] }], [2, '회장님 모시는 차예요.', { body: ['sedan'] }],
+    [2, '캠핑 다니기 좋은 키 큰 차요.', { body: ['suv'] }], [2, '이삿짐을 날라야 해요.', { body: ['truck'] }],
+    [2, '농장에서 배추를 실어 나를 거예요.', { body: ['truck'] }], [2, '문은 두 개면 충분해요. 멋이 중요하죠.', { body: ['coupe'] }],
+    [2, '동호회 열 명이 한 번에 타야 해요.', { body: ['van'] }], [2, '식구가 많아요.', { body: ['suv', 'van'] }],
+    [3, '뒷자리요? 그런 건 사치예요.', { body: ['coupe'] }], [3, '짐칸이 하늘을 보고 있어야 해요.', { body: ['truck'] }],
+    [3, '학원 셔틀처럼 네모반듯한 거요.', { body: ['van'] }], [3, '트렁크는 따로, 엉덩이는 낮게.', { body: ['sedan', 'coupe'] }],
+    [3, '주말엔 산, 평일엔 마트. 아빠 차예요.', { body: ['suv'] }], [3, '김장철마다 시골에서 배추 백 포기를 가져와요.', { body: ['truck'] }, 'autumn'],
+    [1, '지붕은 기본으로요.', { roof: ['hard'] }], [1, '선루프 달아 주세요.', { roof: ['sunroof'] }], [1, '오픈카로 해 주세요!', { roof: ['open'] }],
+    [2, '비 맞는 건 딱 질색이에요.', { roof: ['hard', 'sunroof'] }], [2, '머리카락 휘날리며 달리고 싶어요.', { roof: ['open'] }],
+    [2, '지붕에 작은 창 하나 내 주세요.', { roof: ['sunroof'] }], [2, '장마철에도 매일 탈 거예요.', { roof: ['hard', 'sunroof'] }, 'summer'],
+    [2, '봄바람 맞으며 드라이브하고 싶어요.', { roof: ['open', 'sunroof'] }, 'spring'],
+    [3, '누워서 별을 보고 싶어요. 그래도 지붕은 있어야죠.', { roof: ['sunroof'] }], [3, '지붕이요? 바람이 제 지붕이죠.', { roof: ['open'] }],
+    [3, '햇빛 한 줌도 들어오면 안 돼요. 저 뱀파이어거든요.', { roof: ['hard'] }], [3, '눈 오는 날 지붕 위로 눈 쌓이는 소리가 좋아요.', { roof: ['hard'] }, 'winter'],
+    [1, '빨간색으로요.', { color: ['red'] }], [1, '주황색이 좋아요.', { color: ['orange'] }], [1, '노란색으로 칠해 주세요.', { color: ['yellow'] }],
+    [1, '초록색이요.', { color: ['green'] }], [1, '파란색으로요.', { color: ['blue'] }], [1, '흰색이면 돼요.', { color: ['white'] }], [1, '검은색으로 주세요.', { color: ['black'] }],
+    [2, '소방차 색이요.', { color: ['red'] }], [2, '딸기 같은 색이요.', { color: ['red'] }], [2, '귤 색이면 좋겠어요.', { color: ['orange'] }],
+    [2, '당근 좋아해요. 그 색으로요.', { color: ['orange'] }], [2, '병아리 색이요.', { color: ['yellow'] }], [2, '바나나 색으로요.', { color: ['yellow'] }],
+    [2, '숲 색으로요.', { color: ['green'] }], [2, '개구리 색이요.', { color: ['green'] }], [2, '바다 색이요.', { color: ['blue'] }],
+    [2, '맑은 하늘 색이요.', { color: ['blue'] }], [2, '우유 색이요.', { color: ['white'] }], [2, '눈사람 색이요.', { color: ['white'] }],
+    [2, '까마귀 색이요.', { color: ['black'] }], [2, '밤하늘 색으로요.', { color: ['black'] }], [2, '밝고 따뜻한 색이요.', { color: ['red', 'orange', 'yellow'] }],
+    [2, '첫눈 같은 색이요.', { color: ['white'] }, 'winter'], [2, '단풍 색이면 좋겠어요.', { color: ['red', 'orange'] }, 'autumn'],
+    [2, '개나리 색이요.', { color: ['yellow'] }, 'spring'], [2, '여름 바다 색으로!', { color: ['blue'] }, 'summer'],
+    [3, '사과 색이요. 풋사과 말고요.', { color: ['red'] }], [3, '풋사과 색이요.', { color: ['green'] }], [3, '해 질 녘 노을 색이요.', { color: ['orange', 'red'] }],
+    [3, '해바라기 꽃잎 색이요.', { color: ['yellow'] }, 'summer'], [3, '잔디밭에 세워 두면 안 보이게요.', { color: ['green'] }],
+    [3, '시원한 색이면 좋겠어요.', { color: ['blue', 'green'] }], [3, '흰 도화지처럼요.', { color: ['white'] }], [3, '먹물 한 방울도 아끼지 마세요.', { color: ['black'] }],
+    [3, '신호등에 있는 색 중 하나로요.', { color: ['red', 'yellow', 'green'] }], [3, '무지개엔 없는 색이요.', { color: ['white', 'black'] }],
+    [3, '빨간색만 아니면 돼요.', { color: except('red') }], [3, '튀는 색은 싫어요. 무채색으로요.', { color: ['white', 'black'] }],
+    [3, '군고구마 껍질 말고 속살 색이요.', { color: ['yellow', 'orange'] }, 'winter'], [3, '벚꽃 말고, 벚꽃 지고 난 뒤 잎 색이요.', { color: ['green'] }, 'spring'],
+    [1, '바퀴는 일반 바퀴요.', { wheel: ['normal'] }], [1, '오프로드 타이어로요.', { wheel: ['offroad'] }], [1, '레이싱 휠 달아 주세요.', { wheel: ['racing'] }],
+    [2, '승차감 편한 바퀴요.', { wheel: ['normal'] }], [2, '산길을 달려야 해요.', { wheel: ['offroad'] }], [2, '서킷에 나갈 거예요.', { wheel: ['racing'] }],
+    [3, '동네 마트만 다녀요.', { wheel: ['normal'] }], [3, '진흙탕에서도 안 빠지게요.', { wheel: ['offroad'] }], [3, '자갈길 끝에 집이 있어요.', { wheel: ['offroad'] }],
+    [3, '트랙 한 바퀴, 1분 안에 돌 거예요.', { wheel: ['racing'] }], [3, '눈 덮인 고갯길을 넘어 출근해요.', { wheel: ['offroad'] }, 'winter'],
+    [1, '루프랙 달아 주세요.', { extra: ['rack'] }], [1, '스포일러 달아 주세요.', { extra: ['spoiler'] }], [1, '장식은 없이요.', { extra: ['none'] }],
+    [2, '자전거를 지붕에 얹고 다녀요.', { extra: ['rack'] }], [2, '뒤에 날개 하나 달아 주세요.', { extra: ['spoiler'] }], [2, '군더더기 없는 게 좋아요.', { extra: ['none'] }],
+    [2, '스키 싣고 스키장 가요.', { extra: ['rack'] }, 'winter'], [3, '카약 싣고 강에 갈 거예요.', { extra: ['rack'] }],
+    [3, '서핑보드 싣고 바다로!', { extra: ['rack'] }, 'summer'], [3, '꽁무니에 날개가 있어야 빨라 보이죠.', { extra: ['spoiler'] }],
+    [3, '세차할 때 걸리는 게 하나도 없었으면 해요.', { extra: ['none'] }],
+    [2, '소방차 같은 차 주세요.', { body: ['truck'], color: ['red'] }], [2, '스쿨버스처럼 만들어 주세요.', { body: ['van'], color: ['yellow'] }],
+    [3, '경찰차 느낌으로요.', { body: ['sedan'], color: ['white', 'blue'] }], [3, '정글 탐험 갈 거예요!', { body: ['suv'], wheel: ['offroad'], color: ['green'] }],
+    [3, '레이싱 게임 주인공 차처럼요.', { body: ['coupe'], wheel: ['racing'], extra: ['spoiler'] }],
+    [3, '선물을 잔뜩 실을 거예요. 산타 옷 색으로요.', { body: ['truck', 'van'], color: ['red'] }, 'winter'],
+    [3, '턱시도 입은 신사 같은 차요.', { color: ['black'], extra: ['none'] }],
+    [3, '해변 드라이브! 바람도 맞고 바다 색으로요.', { roof: ['open'], color: ['blue'] }, 'summer'],
+    // premium lines (only offered once the part is unlocked)
+    [1, '슈퍼카로 주세요.', { body: ['supercar'] }], [2, '제로백 3초짜리요.', { body: ['supercar'] }],
+    [3, '주차장에 세우면 다들 쳐다보는 납작한 차요.', { body: ['supercar'] }],
+    [3, '레이스 우승 상금으로 왔어요. 트랙에서 제일 낮은 녀석으로!', { body: ['supercar'], wheel: ['racing'] }],
+    [1, '리무진이요.', { body: ['limo'] }], [2, '결혼식에 신랑 신부 태울 차요.', { body: ['limo'] }], [2, 'VIP 의전용이에요.', { body: ['limo'] }],
+    [3, '뒷좌석에서 다리 쭉 펴고 샴페인을 마시고 싶어요.', { body: ['limo'] }],
+    [1, '캠핑카로 해 주세요.', { body: ['camper'] }], [2, '차에서 먹고 자고 다 할 거예요.', { body: ['camper'] }],
+    [3, '바퀴 달린 집이 필요해요.', { body: ['camper'] }], [3, '은퇴하고 전국 일주 떠나요. 산길도 갈 거고요.', { body: ['camper'], wheel: ['offroad'] }],
+    [1, '은색으로요.', { color: ['silver'] }], [2, '은반지 같은 색이요.', { color: ['silver'] }], [3, '달빛을 그대로 입혀 주세요.', { color: ['silver'] }],
+    [1, '금색으로요.', { color: ['gold'] }], [2, '트로피 같은 색이요.', { color: ['gold'] }],
+    [3, '황금 들판 같은 색이요.', { color: ['gold'] }, 'autumn'], [3, '반짝이는 것 중에 제일 비싼 색이요.', { color: ['gold'] }],
+  ].map(([t, txt, c, s]) => ({ t, txt, c, s: s || null }));
+  const OPENERS = ['안녕하세요!', '저기요,', '음…', '급해요!', '사장님,', '오랜만이에요!', '', '', ''];
+  const CLOSER = '나머지는 알아서 멋지게 해 주세요.';
+  const PRAISE = ['위대한 차다! 딱 제가 상상한 그대로예요.', '어떻게 알았어요? 최고예요!', '좋은 차네요! 친구들한테 자랑할게요.', '말 안 해도 통하는 가게네요.'];
+
+  // ================= calendar =================
+  const MONTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  function dateOf(day) { let d = day, m = 0; while (d > MONTHS[m]) { d -= MONTHS[m]; m++; } return { m: m + 1, d }; }
+  function seasonOf(day) { const m = dateOf(day).m; return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter'; }
+  const SEASON = { spring: '봄', summer: '여름', autumn: '가을', winter: '겨울' };
+
+  // ================= helpers =================
+  const $ = id => document.getElementById(id);
+  const won = n => (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('ko-KR') + '원';
+  const rnd = n => Math.floor(Math.random() * n);
+  const round100 = n => Math.round(n / 100) * 100;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const starStr = n => '★'.repeat(n) + `<span class="off">${'★'.repeat(5 - n)}</span>`;
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  const scene = $('scene');
+  function toSvg(el, x, y) { const p = scene.createSVGPoint(); p.x = x; p.y = y; return p.matrixTransform(el.getScreenCTM().inverse()); }
+  function svgEl(tag, attrs, parent) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+  // ================= state =================
+  let G = null, D = null, C = null;
+  let phase = 'title', station = 0, busy = false, last = 0, scrapArmed = 0;
+  let build = null;
+  let weld = null;   // { cells:[x...], done:Set }
+  let paint = null;  // { cells:[[x,y]...], done:Set, color }
+
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!s || !s.day) return null;
+      if (!Array.isArray(s.unlocked)) s.unlocked = [];
+      return s;
+    } catch (e) { return null; }
+  }
+  function checkUnlocks() {
+    const fresh = UNLOCKS.filter(u => !G.unlocked.includes(u.id) && G.money >= u.need);
+    fresh.forEach(u => G.unlocked.push(u.id));
+    return fresh;
+  }
+  function unlockLadder() {
+    return `<div class="unlocks">${UNLOCKS.map(u => {
+      const on = G.unlocked.includes(u.id);
+      return `<div class="${on ? 'on' : ''}"><span>${on ? '✓' : '🔒'}</span><b>${u.name}</b><small>${on ? `해금 · 차값 +${won(PREMIUM[u.id])}` : `자산 ${won(u.need)}`}</small>
+        ${on ? '' : `<span class="bar"><i style="width:${Math.max(0, Math.min(100, G.money / u.need * 100))}%"></i></span>`}</div>`;
+    }).join('')}</div>`;
+  }
+  function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G)); } catch (e) {} }
+  function wipe() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+  const freshRun = () => ({ day: 1, money: 0, reviews: [4, 4, 4, 4, 4], served: 0, perfect: 0, unlocked: [] });
+  const rating = () => G.reviews.reduce((a, b) => a + b, 0) / G.reviews.length;
+  const freshBuild = () => ({ body: null, roof: null, welded: false, color: null, top: null, wheels: [null, null], extra: 'none' });
+  const wheelValue = () => build.wheels[0] && build.wheels[0] === build.wheels[1] ? build.wheels[0] : 'mixed';
+
+  // ================= orders =================
+  function difficulty(day) {
+    if (day <= 7) return { n: [2, 2], max: 1, min: 1 };
+    if (day <= 30) return { n: [2, 3], max: 2, min: 1 };
+    if (day <= 90) return { n: [3, 3], max: 2, min: 1 };
+    if (day <= 180) return { n: [3, 4], max: 3, min: 2 };
+    return { n: [4, 5], max: 3, min: 2 };
+  }
+  function makeOrder(day) {
+    const cfg = difficulty(day), season = seasonOf(day);
+    const target = cfg.n[0] + rnd(cfg.n[1] - cfg.n[0] + 1);
+    const offered = f => Object.values(f.c).every(vals => vals.some(isUnlocked));
+    const isPremiumLine = f => Object.values(f.c).some(vals => vals.every(v => PREMIUM[v]));
+    const pool = shuffle(BANK.filter(f => offered(f) && f.t <= cfg.max && (f.t >= cfg.min || Math.random() < 0.15 || isPremiumLine(f)) && (!f.s || f.s === season)));
+    const seasonal = pool.findIndex(f => f.s);
+    if (seasonal > 0 && Math.random() < 0.5) pool.unshift(pool.splice(seasonal, 1)[0]);
+    // unlocked premium parts show up in about a third of orders
+    const prem = pool.findIndex(isPremiumLine);
+    if (prem > 0 && Math.random() < 0.35) pool.unshift(pool.splice(prem, 1)[0]);
+    const want = {}, frags = [];
+    let count = 0;
+    for (const f of pool) {
+      const keys = Object.keys(f.c);
+      if (keys.some(k => want[k]) || count + keys.length > target) continue;
+      const merged = { ...want, ...f.c };
+      if (merged.extra && merged.extra.join() === 'rack' && merged.roof && merged.roof.join() === 'open') continue;
+      Object.assign(want, f.c); frags.push(f); count += keys.length;
+      if (count >= target) break;
+    }
+    const text = [pick(OPENERS), ...frags.map(f => f.txt), count < ORDER_ATTRS.length ? CLOSER : ''].filter(Boolean).join(' ');
+    const premium = Object.values(want).reduce((a, vals) => a + (vals.every(v => PREMIUM[v]) ? Math.max(...vals.map(v => PREMIUM[v])) : 0), 0);
+    const quote = round100(1500 + 700 * count + 250 * frags.reduce((a, f) => a + f.t, 0) + premium);
+    return { frags, want, count, text, quote, premium, tipWindow: 30 + 8 * count, elapsed: 0 };
+  }
+
+  // ================= screens =================
+  function showScreen(html) {
+    $('game').hidden = true;
+    const s = $('screen');
+    s.hidden = false;
+    s.innerHTML = html;
+    s.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => act(b.dataset.act)));
+    const first = s.querySelector('.btn');
+    if (first) first.focus({ preventScroll: true });
+  }
+  function heroCar() {
+    const s = { body: 'suv', roof: 'sunroof', base: 'blue', wheels: ['offroad', 'offroad'], extra: 'rack' };
+    return `<div class="hero"><svg viewBox="0 0 400 170" aria-hidden="true"><path d="M0 150 H400" stroke="${INK}" stroke-width="2"/>${carMarkup(s)}</svg></div>`;
+  }
+  function splashScreen() {
+    phase = 'splash';
+    const a = { body: 'supercar', roof: 'hard', base: 'red', wheels: ['racing', 'racing'], extra: 'spoiler' };
+    const b = { body: 'suv', roof: 'sunroof', base: 'blue', wheels: ['offroad', 'offroad'], extra: 'rack' };
+    showScreen(`
+      <div class="splash-art"><svg viewBox="0 0 400 200" aria-hidden="true">
+        <rect width="400" height="150" fill="#dfe6ec"/>
+        <path d="M0 150 V96 H34 V70 H70 V104 H96 V58 H140 V92 H170 V80 H214 V112 H246 V64 H290 V100 H320 V84 H360 V108 H400 V150 Z" fill="#c3ccd4"/>
+        <rect x="236" y="22" width="150" height="30" rx="4" fill="${INK}"/>
+        <text x="311" y="43" text-anchor="middle" font-family="Black Han Sans, sans-serif" font-size="15" fill="#ff7a1a">좋은 차 위대한 차</text>
+        <rect y="150" width="400" height="50" fill="#3a434c"/>
+        <path d="M0 176 H400" stroke="#f2c21b" stroke-width="3" stroke-dasharray="18 14" class="road"/>
+        <g class="drive-loop"><g transform="translate(0 4) scale(.62) translate(0 92)">${carMarkup(a)}</g></g>
+        <g class="drive-loop b"><g transform="translate(0 4) scale(.62) translate(0 92)">${carMarkup(b)}</g></g>
+      </svg></div>
+      <h1>좋은 차 <em>위대한 차</em></h1>
+      <p class="sub">Good Car, Great Car · 손님 말을 알아듣는 자동차 공방</p>
+      <button class="btn go start" type="button" data-act="menu">START <small>Enter · Space</small></button>
+      <p class="blink">PRESS START</p>`);
+    $('screen').querySelectorAll('.wh').forEach(w => w.classList.add('spin'));
+  }
+
+  function titleScreen() {
+    phase = 'title';
+    const saved = load(), date = saved ? dateOf(saved.day) : null;
+    showScreen(`
+      <h1>좋은 차 <em>위대한 차</em></h1>
+      ${heroCar()}
+      <p class="sub">손님의 아리송한 주문을 알아듣고, 프레스부터 의장까지 손수 차를 만들어 1년 동안 가게를 지키세요.</p>
+      <div class="rules"><ol>
+        <li>손님과 <b>계약서에 직인</b>을 찍으면 공정이 시작돼요.</li>
+        <li><b>프레스</b>에 금형을 올리고, <b>차체</b>에 지붕을 얹어 용접하고, <b>도장</b> 부스에서 스프레이를 뿌리고, <b>의장</b>에서 바퀴와 장식을 끼워요. 부품은 선반에서 끌어다 놓으세요.</li>
+        <li>요구 하나를 놓칠 때마다 예정가의 ${CUT_PER_MISS * 100}%가 깎이고 리뷰 별점도 떨어져요. 빨리 완벽하게 만들면 팁 ${TIP_RATE * 100}%.</li>
+        <li>하루 손님은 최대 ${PER_DAY}명. 힘들면 <b>조기 마감</b>해도 돼요. 마감 때 평점이 ★${CLOSE_BELOW} 밑이면 폐업. 목표는 <b>${YEAR}일</b>!</li>
+        <li>통장 자산이 쌓이면 <b>슈퍼카·리무진·캠핑카 금형과 은색·금색 도료</b>가 해금돼요. 해금 옵션이 들어간 차는 훨씬 비싸게 팔려요.</li>
+      </ol></div>
+      <div class="btns">
+        ${saved ? `<button class="btn go" type="button" data-act="continue">이어서 영업 · ${date.m}월 ${date.d}일 <small>Enter</small></button>` : ''}
+        <button class="btn ${saved ? '' : 'go'}" type="button" data-act="new">${saved ? '새로 개업하기 (기록 삭제)' : '개업하기'} <small>${saved ? '' : 'Enter'}</small></button>
+      </div>`);
+  }
+  function dayStartScreen() {
+    phase = 'daystart';
+    checkUnlocks();
+    save();
+    const { m, d } = dateOf(G.day), season = seasonOf(G.day), r = rating();
+    const tips = { spring: '봄 손님은 꽃과 바람 이야기를 자주 해요.', summer: '여름 손님은 바다와 장마 이야기를 자주 해요.', autumn: '가을 손님은 단풍과 김장 이야기를 자주 해요.', winter: '겨울 손님은 눈과 스키 이야기를 자주 해요.' };
+    showScreen(`
+      <p class="sub">영업 ${G.day}일째 / ${YEAR}</p>
+      <h1>${m}월 ${d}일 <em>${SEASON[season]}</em></h1>
+      <div class="progress" aria-label="1년 진행률"><i style="width:${(G.day - 1) / YEAR * 100}%"></i></div>
+      <div class="stats">
+        <div><b>${won(G.money)}</b><span>통장</span></div>
+        <div><b>★${r.toFixed(1)}</b><span>가게 평점</span></div>
+        <div><b>${PER_DAY}명</b><span>오늘 손님</span></div>
+      </div>
+      <p class="sub">${tips[season]}${r < 3 ? ' 평점이 위험해요. 오늘은 꼼꼼하게!' : ''}</p>
+      <button class="btn go" type="button" data-act="open">셔터 올리기 <small>Enter</small></button>
+      <p class="sub">공방 해금 현황</p>
+      ${unlockLadder()}`);
+  }
+  function act(a) {
+    if (a === 'menu') titleScreen();
+    else if (a === 'continue') { G = load() || freshRun(); dayStartScreen(); }
+    else if (a === 'new') { wipe(); G = freshRun(); save(); dayStartScreen(); }
+    else if (a === 'open') startDay();
+    else if (a === 'tomorrow') dayStartScreen();
+  }
+
+  // ================= day flow =================
+  let person = null;
+  function startDay() {
+    D = { n: 0, earned: 0, stars: [], perfect: 0, quotes: [], ratingBefore: rating() };
+    $('screen').hidden = true;
+    $('game').hidden = false;
+    setScene('showroom');
+    $('custLayer').innerHTML = '';
+    person = null;
+    nextCustomer();
+  }
+
+  function placePerson(x, mood, walking) {
+    $('custLayer').innerHTML = `<g id="pWrap" style="transform: translate(${x}px, 190px); transition: transform 1s linear"><g class="${walking ? 'bob' : ''}" id="pBody">${personMarkup(person, mood)}</g></g>`;
+  }
+  function walkTo(x, ms) {
+    const w = $('pWrap');
+    if (!w) return wait(0);
+    $('pBody').classList.add('bob');
+    w.style.transition = `transform ${ms}ms linear`;
+    requestAnimationFrame(() => { w.style.transform = `translate(${x}px, 190px)`; });
+    return wait(ms).then(() => { const b = $('pBody'); if (b) b.classList.remove('bob'); });
+  }
+  function setMood(mood) { const b = $('pBody'); if (b) b.innerHTML = personMarkup(person, mood); $('face').innerHTML = avatarSvg(person, mood); }
+
+  async function nextCustomer() {
+    busy = true;
+    D.n++;
+    C = makeOrder(G.day);
+    build = freshBuild();
+    weld = null; paint = null;
+    station = 0;
+    phase = 'arrive';
+    renderCloseBtn();
+    setHint('손님이 들어오고 있어요… <b>말풍선</b>을 누르면 바로 들을 수 있어요');
+    $('meter').hidden = true;
+    $('pmDots').innerHTML = '';
+    if (person && $('pWrap')) await walkTo(460, 700);
+    person = newPerson();
+    setScene('showroom');
+    $('carG').innerHTML = '';
+    $('overlay').innerHTML = '';
+    $('result').hidden = true;
+    $('shelf').hidden = false;
+    $('quoteRow').hidden = true;
+    $('custStars').hidden = true;
+    $('say').className = 'say';
+    $('say').textContent = '';
+    $('face').innerHTML = avatarSvg(person, 'neutral');
+    renderHud();
+    renderLine();
+    renderShelf();
+    placePerson(470, 'neutral', true);
+    await walkTo(262, 1000);
+    busy = false;
+    typeOut(C.text, () => openContract());
+  }
+
+  let typer = null;
+  function typeOut(text, done) {
+    const say = $('say');
+    let i = 0;
+    clearInterval(typer);
+    typer = setInterval(() => {
+      i++;
+      say.innerHTML = text.slice(0, i).replace(/</g, '&lt;') + (i < text.length ? '<span class="caret">▌</span>' : '');
+      if (i >= text.length) { clearInterval(typer); typer = null; done && done(); }
+    }, 26);
+    typeOut.finish = () => { if (!typer) return; clearInterval(typer); typer = null; say.textContent = text; done && done(); };
+  }
+
+  function openContract() {
+    if (phase !== 'arrive') return;
+    phase = 'contract';
+    const { m, d } = dateOf(G.day);
+    $('overlay').innerHTML = `
+      <div class="doc" id="doc">
+        <h3>주문 계약서 <span>No. ${m}${String(d).padStart(2, '0')}-${String(D.n).padStart(2, '0')}</span></h3>
+        <dl>
+          <dt>예정가</dt><dd>${won(C.quote)}</dd>
+          ${C.premium ? `<dt>프리미엄 옵션</dt><dd>+${won(C.premium)} 포함</dd>` : ''}
+          <dt>공정</dt><dd>프레스→차체→도장→의장</dd>
+          <dt>빠른 출고 팁</dt><dd>${C.tipWindow}초 안 +${TIP_RATE * 100}%</dd>
+          <dt>해석 실수</dt><dd>1건당 −${CUT_PER_MISS * 100}%</dd>
+        </dl>
+        <div class="sign" id="signBox">공장 직인</div>
+      </div>`;
+    renderShelf();
+    setHint('선반의 <b>직인</b>을 계약서 서명란에 끌어다 찍으세요');
+  }
+
+  async function signContract() {
+    if (phase !== 'contract' || busy) return;
+    busy = true;
+    const box = $('signBox');
+    box.innerHTML = '<div class="stamp">좋은차<br>직인</div>';
+    setMood('happy');
+    await wait(650);
+    setMood('neutral');
+    $('quoteRow').hidden = false;
+    $('quoteVal').textContent = won(C.quote);
+    phase = 'build';
+    station = 0;
+    await enterStation(0, true);
+    busy = false;
+  }
+
+  // ================= stations =================
+  function setScene(kind) {
+    const s = sceneMarkup(kind);
+    $('bg').innerHTML = s.bg;
+    $('fg').innerHTML = s.fg;
+    $('fx').innerHTML = '';
+    $('custLayer').style.display = kind === 'showroom' ? '' : 'none';
+  }
+  function moveCar(x, animate) {
+    const g = $('carMove');
+    if (!animate) { g.style.transition = 'none'; g.style.transform = `translateX(${x}px)`; void g.getBoundingClientRect(); g.style.transition = 'transform .55s cubic-bezier(.5,0,.3,1)'; return wait(0); }
+    g.style.transform = `translateX(${x}px)`;
+    return wait(560);
+  }
+  function spinWheels(on) { $('carG').querySelectorAll('.wh').forEach(w => w.classList.toggle('spin', on)); }
+
+  function carState() {
+    return {
+      body: build.body, roof: build.roof, base: build.color, top: build.top,
+      welded: build.welded, seam: station === 1 && phase === 'build',
+      ghostRoof: station === 1 && phase === 'build',
+      slots: station === 3 && phase === 'build',
+      wheels: build.wheels, extra: build.extra,
+    };
+  }
+  function renderCar() {
+    $('carG').innerHTML = carMarkup(carState());
+    if (weld && station === 1) weld.done.forEach(x => addBead(x, false));
+  }
+
+  async function enterStation(i, first) {
+    busy = true;
+    if (!first) { spinWheels(true); await moveCar(470, true); }
+    station = i;
+    setScene(STATIONS[i].id);
+    renderCar();
+    await moveCar(-470, false);
+    $('overlay').innerHTML = `<div class="titlecard"><small>STEP ${i + 1} · ${STATIONS[i].sub}</small>${i + 1}공정 · ${STATIONS[i].name}</div>`;
+    renderLine();
+    renderShelf();
+    stationHint();
+    await moveCar(0, true);
+    busy = false;
+    if (i === 2 && build.top) startPaintCells();
+  }
+
+  function stationHint() {
+    $('meter').hidden = true;
+    if (phase !== 'build') return;
+    if (station === 0) setHint(build.body ? `<b>${LABEL.body[build.body]}</b> 차체가 찍혔어요. 다른 금형으로 다시 찍을 수도 있어요` : '금형을 <b>프레스 위</b>로 끌어다 놓으면 강판을 찍어요');
+    if (station === 1) {
+      if (!build.roof) setHint('지붕 패널을 <b>차체 위</b>로 끌어다 얹으세요');
+      else if (!build.welded) { setHint('주황색 이음새를 <b>토치로 문질러</b> 용접하세요'); showMeter(weld ? weld.done.size / weld.cells.length / WELD_DONE : 0); }
+      else setHint(`<b>${LABEL.roof[build.roof]}</b> 용접 완료`);
+    }
+    if (station === 2) {
+      if (!build.top && !build.color) setHint('도료 캔을 <b>도장 부스</b>로 끌어다 놓으세요');
+      else if (build.top) { setHint(`<b>${LABEL.color[build.top]}</b> 도료 장전. 차 위를 <b>문질러</b> 칠하세요`); showMeter(paint ? paint.done.size / paint.cells.length / PAINT_DONE : 0); }
+      else setHint(`<b>${LABEL.color[build.color]}</b> 도장 완료. 다른 도료로 덧칠할 수도 있어요`);
+    }
+    if (station === 3) {
+      const n = build.wheels.filter(Boolean).length;
+      setHint(n < 2 ? `바퀴를 <b>휠하우스</b>에 끼우세요 (${n}/2). 장식은 차 위에 놓으면 달려요` : `바퀴 ${wheelValue() === 'mixed' ? '<b>짝짝이</b>!' : `<b>${LABEL.wheel[wheelValue()]}</b>`} · 장식 <b>${LABEL.extra[build.extra]}</b>`);
+    }
+  }
+  function setHint(html) { $('hint').innerHTML = html; }
+  function showMeter(r) { $('meter').hidden = false; $('meterFill').style.width = Math.min(100, r * 100) + '%'; }
+  function toast(text) {
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = text;
+    $('stagebox').appendChild(t); setTimeout(() => t.remove(), 1600);
+  }
+
+  // ----- press -----
+  async function pressDie(v) {
+    if (busy) return;
+    busy = true;
+    const ram = $('ram');
+    ram.style.transition = 'transform .22s ease-in';
+    ram.style.transform = 'translateY(98px)';
+    await wait(230);
+    $('stagebox').animate([{ transform: 'translateY(3px)' }, { transform: 'none' }], { duration: 120 });
+    const sheet = $('sheet'); if (sheet) sheet.style.display = 'none';
+    build.body = v;
+    build.roof = null; build.welded = false;
+    renderCar();
+    sparks(200, 172, 10, '#ffffff');
+    await wait(160);
+    ram.style.transition = 'transform .45s ease-out';
+    ram.style.transform = 'translateY(0)';
+    await wait(300);
+    busy = false;
+    afterChange();
+  }
+
+  // ----- body: roof + weld -----
+  function placeRoof(v) {
+    if (busy) return;
+    build.roof = v;
+    build.welded = false;
+    const [x1, x2] = CARS[build.body].seam;
+    weld = { cells: [], done: new Set() };
+    for (let x = x1 + 6; x <= x2 - 6; x += 8) weld.cells.push(x);
+    renderCar();
+    $('carG').animate([{ transform: 'translate(40px, 66px) scale(.8)' }, { transform: 'translate(40px, 70px) scale(.8)' }], { duration: 200 });
+    afterChange();
+  }
+  function addBead(x, hot) {
+    const beads = $('beads'); if (!beads) return;
+    const y = CARS[build.body].seam[2];
+    const b = svgEl('circle', { cx: x, cy: y, r: 2.8, fill: hot ? '#ffd27a' : '#8a9097', stroke: hot ? '#ff7a1a' : 'none' }, beads);
+    if (hot) setTimeout(() => { b.setAttribute('fill', '#8a9097'); b.setAttribute('stroke', 'none'); }, 500);
+  }
+  function weldAt(carX, carY) {
+    if (!weld || build.welded) return;
+    const y = CARS[build.body].seam[2];
+    if (Math.abs(carY - y) > 16) return;
+    let hit = false;
+    weld.cells.forEach(x => { if (!weld.done.has(x) && Math.abs(x - carX) < 10) { weld.done.add(x); addBead(x, true); hit = true; } });
+    if (hit) { const p = carToScene(carX, y); sparks(p.x, p.y, 5, '#ffcf5a'); }
+    if (weld.done.size / weld.cells.length >= WELD_DONE) finishWeld(); else stationHint();
+  }
+  function finishWeld() {
+    build.welded = true;
+    flashCar('#ffd27a');
+    renderCar();
+    afterChange();
+  }
+  async function autoWeld() {
+    if (busy || !weld || build.welded) return;
+    busy = true;
+    const y = CARS[build.body].seam[2];
+    for (const x of weld.cells) {
+      if (!weld.done.has(x)) { weld.done.add(x); addBead(x, true); const p = carToScene(x, y); drawTool(p.x, p.y); if (Math.random() < .5) sparks(p.x, p.y, 3, '#ffcf5a'); stationHint(); await wait(22); }
+    }
+    hideTool();
+    busy = false;
+    finishWeld();
+  }
+
+  // ----- paint -----
+  function loadPaint(v) {
+    if (busy) return;
+    if (build.top === v) return;
+    if (build.top) { $('pmDots').innerHTML = ''; }
+    build.top = v;
+    renderCar();
+    startPaintCells();
+    afterChange();
+  }
+  function startPaintCells() {
+    $('pmDots').innerHTML = '';
+    const paths = [...$('carG').querySelectorAll('path[data-paint]')].slice(0, build.roof && build.roof !== 'open' ? 2 : 1);
+    const c = CARS[build.body], cells = [];
+    for (let x = 22; x <= 378; x += 12) for (let y = c.top; y <= 138; y += 10) {
+      let inside = true;
+      try { inside = paths.some(p => p.isPointInFill(new DOMPoint(x, y))); } catch (e) { inside = y > c.top + 6; }
+      if (inside) cells.push([x, y]);
+    }
+    paint = { cells, done: new Set() };
+    stationHint();
+  }
+  let lastDot = null;
+  function sprayAt(carX, carY, force) {
+    if (!build.top || !paint) return;
+    if (!force && lastDot && Math.hypot(lastDot[0] - carX, lastDot[1] - carY) < 6) return;
+    lastDot = [carX, carY];
+    svgEl('circle', { cx: carX.toFixed(1), cy: carY.toFixed(1), r: 30, fill: 'url(#soft)' }, $('pmDots'));
+    paint.cells.forEach((cell, i) => { if (!paint.done.has(i) && Math.hypot(cell[0] - carX, cell[1] - carY) < 25) paint.done.add(i); });
+    if (paint.done.size / paint.cells.length >= PAINT_DONE) finishPaint(); else stationHint();
+  }
+  function finishPaint() {
+    build.color = build.top;
+    build.top = null;
+    paint = null;
+    $('pmDots').innerHTML = '';
+    renderCar();
+    flashCar('#ffffff');
+    afterChange();
+  }
+  async function autoSpray() {
+    if (busy || !build.top) return;
+    busy = true;
+    const c = CARS[build.body];
+    const rows = [];
+    for (let y = c.top + 6; y <= 136; y += 18) rows.push(y);
+    for (let r = 0; r < rows.length && build.top; r++) {
+      const ltr = r % 2 === 0;
+      for (let k = 0; k <= 24 && build.top; k++) {
+        const x = ltr ? 18 + k * 15 : 378 - k * 15;
+        sprayAt(x, rows[r], true);
+        const p = carToScene(x, rows[r]); drawTool(p.x, p.y - 20);
+        await wait(12);
+      }
+    }
+    hideTool();
+    if (build.top) finishPaint();
+    busy = false;
+  }
+
+  // ----- trim -----
+  function installWheel(i, v) {
+    if (busy) return;
+    build.wheels[i] = v;
+    renderCar();
+    const w = $('carG').querySelector(`.wh[data-i="${i}"]`);
+    if (w) w.animate([{ transform: 'rotate(-240deg) scale(.6)', opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'ease-out' });
+    afterChange();
+  }
+  function setExtra(v) {
+    if (busy) return;
+    if (v === 'rack' && build.roof === 'open') { toast('오픈탑에는 루프랙을 달 수 없어요'); return; }
+    build.extra = v;
+    renderCar();
+    afterChange();
+  }
+
+  function afterChange() { renderShelf(); stationHint(); }
+
+  function stationReady() {
+    if (station === 0) return !!build.body;
+    if (station === 1) return !!build.roof && build.welded;
+    if (station === 2) return !!build.color && !build.top;
+    return build.wheels.every(Boolean);
+  }
+
+  function mainAction() {
+    if (busy) return;
+    if (phase === 'contract') return signContract();
+    if (phase !== 'build') return;
+    if (station === 1 && build.roof && !build.welded) return autoWeld();
+    if (station === 2 && build.top) return autoSpray();
+    if (!stationReady()) { wiggle($('mainBtn')); return; }
+    if (station < 3) enterStation(station + 1);
+    else deliver();
+  }
+
+  function scrap() {
+    if (phase !== 'build' || busy || !build.body) return;
+    const now = performance.now();
+    if (now - scrapArmed > 2000) {
+      scrapArmed = now;
+      $('scrapBtn').innerHTML = `정말 폐차? <small>-${won(SCRAP_COST)}</small>`;
+      setTimeout(() => { if (performance.now() - scrapArmed >= 2000) renderShelf(); }, 2050);
+      return;
+    }
+    scrapArmed = 0;
+    G.money -= SCRAP_COST;
+    D.earned -= SCRAP_COST;
+    floatText('-' + won(SCRAP_COST), true);
+    build = freshBuild();
+    weld = null; paint = null; $('pmDots').innerHTML = '';
+    renderHud();
+    enterStation(0);
+  }
+
+  // ================= delivery =================
+  async function deliver() {
+    busy = true;
+    phase = 'deliver';
+    renderShelf();
+    renderLine();
+    setHint('완성차를 손님에게 가져가는 중…');
+    spinWheels(true);
+    await moveCar(470, true);
+    setScene('showroom');
+    $('overlay').innerHTML = '';
+    placePerson(352, 'neutral', false);
+    renderCar();
+    spinWheels(true);
+    await moveCar(-470, false);
+    await moveCar(-58, true);
+    spinWheels(false);
+    await wait(250);
+    judge();
+    busy = false;
+  }
+
+  function judge() {
+    phase = 'result';
+    const final = { body: build.body, roof: build.roof, color: build.color, wheel: wheelValue(), extra: build.extra };
+    const rows = [];
+    let misses = 0;
+    C.frags.forEach(f => Object.keys(f.c).forEach(attr => {
+      const ok = f.c[attr].includes(final[attr]);
+      if (!ok) misses++;
+      rows.push({ clue: f.txt, attr, need: f.c[attr], got: final[attr], ok });
+    }));
+    const cut = Math.min(C.quote, round100(C.quote * CUT_PER_MISS * misses));
+    const fast = C.elapsed <= C.tipWindow;
+    const tip = misses === 0 && fast ? round100(C.quote * TIP_RATE) : 0;
+    // a premium part the customer left to you is sold as an upgrade at half its value
+    let upgrade = 0;
+    if (misses === 0) ORDER_ATTRS.forEach(a => { if (!C.want[a] && PREMIUM[final[a]]) upgrade += round100(PREMIUM[final[a]] / 2); });
+    const paid = C.quote - cut + tip + upgrade;
+    const stars = [5, 3, 2, 1, 1, 1][misses];
+    const firstMiss = rows.find(r => !r.ok);
+    const line = misses === 0 ? pick(PRAISE)
+      : misses === 1 ? `${SUBJ[firstMiss.attr]} 제가 말한 거랑 달라요. 깎아 주셔야겠어요.`
+      : misses === 2 ? '제 말을 절반은 흘려들으셨네요…'
+      : '이건 제가 주문한 차가 아니에요!';
+
+    G.money += paid; G.served++;
+    G.reviews.push(stars); if (G.reviews.length > REVIEW_WINDOW) G.reviews.shift();
+    D.earned += paid; D.stars.push(stars);
+    if (misses === 0) { D.perfect++; G.perfect++; }
+    D.quotes.push({ stars, line });
+    const fresh = checkUnlocks();
+
+    setMood(misses ? 'angry' : 'happy');
+    const pw = $('pBody');
+    if (pw) pw.animate(misses
+      ? [{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }]
+      : [{ transform: 'translateY(0)' }, { transform: 'translateY(-14px)' }, { transform: 'translateY(0)' }, { transform: 'translateY(-8px)' }, { transform: 'translateY(0)' }],
+      { duration: 600 });
+    const mark = svgEl('text', { x: 352, y: 56, 'text-anchor': 'middle', 'font-size': 26, 'font-family': 'Black Han Sans, sans-serif', fill: misses ? '#d63a2f' : '#1f9d55', stroke: INK, 'stroke-width': 1 }, $('fx'));
+    mark.textContent = misses ? '!!' : '♥';
+    $('say').className = 'say ' + (misses ? 'bad' : 'good');
+    $('say').textContent = line;
+    $('custStars').hidden = false;
+    $('custStars').innerHTML = starStr(stars);
+    $('quoteRow').hidden = true;
+    flash(misses ? 'bad' : 'good');
+    floatText((misses ? '' : '+') + won(paid), misses > 0);
+    if (misses) shake();
+
+    const freeAttrs = ORDER_ATTRS.filter(a => !C.want[a]);
+    const needText = (attr, need) => need.length >= 5
+      ? `${ALL_COLORS.filter(c => !need.includes(c)).map(c => LABEL.color[c]).join('·')} 빼고 아무거나`
+      : need.map(v => LABEL[attr][v]).join(' 또는 ');
+    const lastOfDay = D.n >= PER_DAY || D.closing;
+    $('shelf').hidden = true;
+    setHint('');
+    const res = $('result');
+    res.hidden = false;
+    res.innerHTML = `
+      ${fresh.map(u => `<div class="unlocked-news">🔓 자산 ${won(u.need)} 돌파! <b>${u.name}</b> 해금 · 차값 +${won(PREMIUM[u.id])}</div>`).join('')}
+      <h2>${misses === 0 ? '주문 완벽 해석!' : `요구 ${C.count}개 중 ${misses}개를 놓쳤어요`}</h2>
+      <ul class="checks">${rows.map(r => `
+        <li class="${r.ok ? '' : 'no'}">
+          <span class="mk">${r.ok ? '✓' : '✗'}</span>
+          <span class="clue">“${r.clue}”</span>
+          <span class="ans">${ATTR[r.attr]}: <b>${needText(r.attr, r.need)}</b> · 만든 차: ${LABEL[r.attr][r.got]}</span>
+        </li>`).join('')}</ul>
+      ${freeAttrs.length ? `<p class="free">자유 선택: ${freeAttrs.map(a => ATTR[a]).join(', ')}</p>` : ''}
+      <div class="bill">
+        <span>예정가${C.premium ? ` (프리미엄 +${won(C.premium)} 포함)` : ''}</span><span>${won(C.quote)}</span>
+        ${upgrade ? `<span>프리미엄 업그레이드 (자유 선택분)</span><span class="plus">+${won(upgrade)}</span>` : ''}
+        ${cut ? `<span>해석 실수 감액 (${misses}개 × ${CUT_PER_MISS * 100}%)</span><span class="minus">-${won(cut)}</span>` : ''}
+        ${tip ? `<span>빠른 출고 팁</span><span class="plus">+${won(tip)}</span>` : ''}
+        ${misses === 0 && !fast ? `<span>빠른 출고 팁 (${C.tipWindow}초 초과)</span><span>0원</span>` : ''}
+        <span class="total">받은 돈 · 리뷰 ${'★'.repeat(stars)}</span><span class="total">${won(paid)}</span>
+      </div>
+      <div class="actions">
+        ${lastOfDay ? '' : '<button class="btn warn" type="button" id="earlyBtn">조기 마감</button>'}
+        <button class="btn go" type="button" id="afterBtn" style="${lastOfDay ? 'grid-column: 1 / -1' : ''}">${lastOfDay ? '영업 마감' : `다음 손님 (${D.n + 1}/${PER_DAY})`} <small>Enter</small></button>
+      </div>`;
+    $('afterBtn').addEventListener('click', () => afterResult());
+    if ($('earlyBtn')) $('earlyBtn').addEventListener('click', () => afterResult(true));
+    renderCloseBtn();
+    $('afterBtn').focus({ preventScroll: true });
+    renderHud();
+  }
+
+  // HUD button: between customers it closes now; mid-build it closes after this car
+  function closeEarly() {
+    if (busy) return;
+    if (phase === 'result') return afterResult(true);
+    if (phase === 'arrive' || phase === 'contract') {
+      clearInterval(typer); typer = null;
+      D.n--;
+      $('overlay').innerHTML = '';
+      endDay();
+      return;
+    }
+    if (phase === 'build' || phase === 'deliver') {
+      D.closing = !D.closing;
+      renderCloseBtn();
+      toast(D.closing ? '이번 손님까지만 받고 마감해요' : '마감 예약을 취소했어요');
+    }
+  }
+  function renderCloseBtn() {
+    const b = $('closeBtn');
+    b.textContent = D && D.closing ? '마감 예약됨' : '조기 마감';
+    b.classList.toggle('on', !!(D && D.closing));
+    b.disabled = phase === 'result' && D.n >= PER_DAY;
+  }
+
+  async function afterResult(forceEnd) {
+    if (phase !== 'result' || busy) return;
+    busy = true;
+    // customer drives off with the car
+    $('custLayer').innerHTML = '';
+    spinWheels(true);
+    await moveCar(470, true);
+    $('carG').innerHTML = '';
+    $('fx').innerHTML = '';
+    busy = false;
+    person = null;
+    if (D.n < PER_DAY && !D.closing && !forceEnd) nextCustomer();
+    else endDay();
+  }
+
+  function endDay() {
+    const r = rating();
+    const served = D.stars.length;
+    const avg = served ? D.stars.reduce((a, b) => a + b, 0) / served : 0;
+    const early = served < PER_DAY;
+    const { m, d } = dateOf(G.day);
+    const delta = r - D.ratingBefore;
+    const reviews = shuffle(D.quotes.slice()).slice(0, 3).map(q => `<div><span class="stars">${starStr(q.stars)}</span>${q.line}</div>`).join('');
+    const statsHtml = `<div class="stats">
+        <div><b>${won(D.earned)}</b><span>오늘 수입</span></div>
+        <div><b>${D.perfect}/${served}</b><span>완벽 해석</span></div>
+        <div><b>${served ? '★' + avg.toFixed(1) : '—'}</b><span>오늘 별점</span></div>
+      </div>`;
+    if (r < CLOSE_BELOW) {
+      phase = 'closed';
+      wipe();
+      showScreen(`
+        <p class="sub">${m}월 ${d}일 · 영업 ${G.day}일째</p>
+        <h1>가게 문을 닫았습니다</h1>
+        <p class="sub">가게 평점이 ★${r.toFixed(1)}까지 떨어져 손님이 끊겼어요.</p>
+        ${statsHtml}
+        <div class="verdict bad">${G.day}일 버팀 · 통장 ${won(G.money)}</div>
+        <div class="reviews">${reviews}</div>
+        <button class="btn go" type="button" data-act="new">다시 개업하기 <small>Enter</small></button>`);
+      return;
+    }
+    if (G.day >= YEAR) {
+      phase = 'year';
+      wipe();
+      showScreen(`
+        <p class="sub">12월 31일 · 영업 ${YEAR}일째</p>
+        <h1>1년 영업 <em>완주!</em></h1>
+        <div class="big">${won(G.money)}</div>
+        <div class="stats">
+          <div><b>${G.served}대</b><span>출고</span></div>
+          <div><b>${Math.round(G.perfect / G.served * 100)}%</b><span>완벽 해석률</span></div>
+          <div><b>★${r.toFixed(1)}</b><span>최종 평점</span></div>
+        </div>
+        <div class="verdict great">${r >= 4.5 ? '위대한 정비소' : '좋은 정비소'}</div>
+        <button class="btn go" type="button" data-act="new">새해 다시 개업하기 <small>Enter</small></button>`);
+      return;
+    }
+    phase = 'dayend';
+    G.day++;
+    save();
+    showScreen(`
+      <p class="sub">${m}월 ${d}일 ${early ? `조기 마감 · 손님 ${served}/${PER_DAY}명` : '영업 마감'}</p>
+      <h1>${!served ? '쉬어 가는 하루' : D.perfect === served && served >= 3 ? '위대한 하루' : D.perfect / served >= 0.6 ? '좋은 하루' : '아쉬운 하루'}</h1>
+      ${statsHtml}
+      <p class="sub">가게 평점 ★${D.ratingBefore.toFixed(1)} → <b>★${r.toFixed(1)}</b> (${delta >= 0 ? '+' : ''}${delta.toFixed(1)})${r < 3 ? ' · 폐업 위험!' : ''}</p>
+      <div class="reviews">${reviews}</div>
+      <button class="btn go" type="button" data-act="tomorrow">다음 날로 <small>Enter</small></button>
+      <p class="sub">공방 해금 현황 · 통장 ${won(G.money)}</p>
+      ${unlockLadder()}`);
+  }
+
+  // ================= shelf (parts) =================
+  function thumb(kind, v) {
+    if (kind === 'seal') return `<svg viewBox="0 0 60 50"><rect x="22" y="2" width="16" height="24" rx="4" fill="#8a5a3b" stroke="${INK}" stroke-width="2"/><rect x="14" y="24" width="32" height="12" rx="3" fill="#6b4329" stroke="${INK}" stroke-width="2"/><rect x="16" y="36" width="28" height="8" fill="#d63a2f" stroke="${INK}" stroke-width="2"/></svg>`;
+    if (kind === 'body') {
+      const c = CARS[v];
+      return `<svg viewBox="0 0 400 170"><rect x="4" y="12" width="392" height="150" rx="16" fill="#59636d" stroke="${INK}" stroke-width="6"/><path d="${c.green}" fill="#3b434b"/><path d="${c.lower}" fill="#3b434b"/><path d="${c.green} ${c.lower}" fill="none" stroke="#c3cad1" stroke-width="5"/></svg>`;
+    }
+    if (kind === 'roof') {
+      const c = CARS[build.body] || CARS.sedan, [x1, x2] = c.seam;
+      const vb = `${x1 - 12} ${c.top - 18} ${x2 - x1 + 24} ${c.belt - c.top + 30}`;
+      if (v === 'open') {
+        const [fx, fy, fw] = c.fold;
+        return `<svg viewBox="${vb}"><path d="${c.shield}" fill="url(#glass)" stroke="${INK}" stroke-width="2"/><rect x="${(x1 + x2) / 2 - fw / 2}" y="${(c.top + c.belt) / 2}" width="${fw}" height="14" rx="7" fill="#2b2f35" stroke="${INK}" stroke-width="2"/></svg>`;
+      }
+      return `<svg viewBox="${vb}"><path d="${c.green}" fill="url(#metal)" stroke="${INK}" stroke-width="2.5"/><path d="${c.glass}" fill="url(#glass)" stroke="${INK}" stroke-width="1.5"/>${v === 'sunroof' ? `<rect x="${c.sun[0]}" y="${c.roofY - 4}" width="${c.sun[1] - c.sun[0]}" height="7" rx="2" fill="#2c4152" stroke="${INK}" stroke-width="1.5"/>` : ''}</svg>`;
+    }
+    if (kind === 'color') return `<svg viewBox="0 0 60 64"><path d="M14 14 Q30 -2 46 14" stroke="${INK}" fill="none" stroke-width="2.5"/><rect x="10" y="14" width="40" height="46" rx="4" fill="#c9cfd5" stroke="${INK}" stroke-width="2.5"/><rect x="10" y="26" width="40" height="22" fill="${PAINT[v]}" stroke="${INK}" stroke-width="1.5"/><ellipse cx="30" cy="14" rx="20" ry="5" fill="#e3e7eb" stroke="${INK}" stroke-width="2"/><path d="M16 60 V48" stroke="${PAINT[v]}" stroke-width="3"/></svg>`;
+    if (kind === 'wheel') return `<svg viewBox="-32 -32 64 64">${wheelInner(v, 25)}</svg>`;
+    if (v === 'rack') return `<svg viewBox="0 0 80 40"><rect x="6" y="12" width="68" height="6" rx="3" fill="#2b2f35"/><rect x="12" y="16" width="5" height="14" fill="#2b2f35"/><rect x="63" y="16" width="5" height="14" fill="#2b2f35"/><rect x="28" y="6" width="4" height="12" fill="#3a4048"/><rect x="48" y="6" width="4" height="12" fill="#3a4048"/></svg>`;
+    if (v === 'spoiler') return `<svg viewBox="0 0 80 40"><rect x="18" y="16" width="5" height="18" fill="#23272c"/><rect x="56" y="16" width="5" height="18" fill="#23272c"/><path d="M6 18 L72 8 L76 16 L10 24 Z" fill="#23272c" stroke="${INK}" stroke-width="1.5"/></svg>`;
+    return `<svg viewBox="0 0 80 40"><circle cx="40" cy="20" r="14" fill="none" stroke="#8a939c" stroke-width="4"/><path d="M30 10 L50 30" stroke="#8a939c" stroke-width="4"/></svg>`;
+  }
+
+  function shelfItems() {
+    if (phase === 'contract') return [{ kind: 'seal', v: 'seal', label: '공장 직인' }];
+    if (phase !== 'build') return [];
+    const attr = ['body', 'roof', 'color', 'wheel'][station];
+    const items = Object.keys(LABEL[attr]).filter(v => v !== 'mixed').map(v => {
+      const u = UNLOCKS.find(x => x.id === v);
+      return { kind: attr, v, label: LABEL[attr][v], locked: !isUnlocked(v), need: u ? u.need : 0, prem: PREMIUM[v] || 0 };
+    });
+    if (station === 3) Object.keys(LABEL.extra).forEach(v => items.push({ kind: 'extra', v, label: v === 'none' ? '장식 떼기' : LABEL.extra[v] }));
+    return items;
+  }
+  function isSelected(it) {
+    if (it.kind === 'body') return build.body === it.v;
+    if (it.kind === 'roof') return build.roof === it.v;
+    if (it.kind === 'color') return (build.top || build.color) === it.v;
+    if (it.kind === 'wheel') return build.wheels.includes(it.v);
+    if (it.kind === 'extra') return build.extra === it.v;
+    return false;
+  }
+
+  let ITEMS = [];
+  function renderShelf() {
+    ITEMS = shelfItems();
+    $('shelfTitle').textContent = phase === 'contract' ? '계약 도구' : phase === 'build' ? STATIONS[station].shelf : '대기 중';
+    $('tray').innerHTML = ITEMS.map((it, i) => `
+      <button class="part ${isSelected(it) ? 'sel' : ''} ${it.locked ? 'locked' : ''}" type="button" data-i="${i}" aria-label="${it.label}${it.locked ? ' 잠김' : ''}" ${it.locked ? 'aria-disabled="true"' : ''}>
+        <span class="k">${i + 1}</span>${it.prem && !it.locked ? `<span class="prem">+${it.prem / 1000}천</span>` : ''}
+        ${thumb(it.kind, it.v)}${it.locked ? `<span class="lock">자산 ${it.need / 10000}만</span>` : ''}<span>${it.label}</span>
+      </button>`).join('');
+    $('tray').querySelectorAll('.part').forEach(el => {
+      const it = ITEMS[+el.dataset.i];
+      if (it.locked) el.addEventListener('click', () => toast(`통장 자산 ${won(it.need)}이 되면 해금돼요`));
+      else bindDrag(el, it);
+    });
+    // main action label
+    const mb = $('mainBtn');
+    let label = '다음', ready = false, disabled = false;
+    if (phase === 'contract') { label = '직인 찍기'; ready = true; }
+    else if (phase === 'build') {
+      if (station === 1 && build.roof && !build.welded) label = '용접 로봇 돌리기';
+      else if (station === 2 && build.top) label = '자동 도장 로봇';
+      else if (station < 3) { label = `${STATIONS[station + 1].name} 공정으로 →`; ready = stationReady(); disabled = !ready; }
+      else { label = '출고하기'; ready = stationReady(); disabled = !ready; }
+    } else disabled = true;
+    mb.innerHTML = `${label} <small>Enter</small>`;
+    mb.disabled = disabled;
+    mb.classList.toggle('ready', ready);
+    const sb = $('scrapBtn');
+    sb.disabled = phase !== 'build' || !build.body;
+    if (performance.now() - scrapArmed > 2000) sb.innerHTML = '폐차 <small>Backspace</small>';
+  }
+
+  // tap = auto-place; drag = place where you drop
+  function useItem(it) {
+    if (busy || !it) return;
+    if (it.locked) return toast(`통장 자산 ${won(it.need)}이 되면 해금돼요`);
+    if (it.kind === 'seal') return signContract();
+    if (it.kind === 'body') return pressDie(it.v);
+    if (it.kind === 'roof') return placeRoof(it.v);
+    if (it.kind === 'color') return loadPaint(it.v);
+    if (it.kind === 'wheel') { build.wheels = [it.v, it.v]; renderCar(); $('carG').querySelectorAll('.wh').forEach(w => w.animate([{ transform: 'rotate(-240deg) scale(.6)', opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 380 })); return afterChange(); }
+    if (it.kind === 'extra') return setExtra(it.v);
+  }
+  function dropItem(it, x, y) {
+    if (busy) return;
+    const sr = $('stagebox').getBoundingClientRect();
+    const onStage = x >= sr.left && x <= sr.right && y >= sr.top && y <= sr.bottom;
+    if (it.kind === 'seal') {
+      const box = $('signBox');
+      const r = box && box.getBoundingClientRect();
+      if (r && x >= r.left - 10 && x <= r.right + 10 && y >= r.top - 10 && y <= r.bottom + 10) return signContract();
+      return toast('직인은 서명란에 찍어 주세요');
+    }
+    if (!onStage) return toast('작업대 위에 놓아 주세요');
+    const p = toSvg($('carG'), x, y);
+    if (it.kind === 'body') return pressDie(it.v);
+    if (it.kind === 'color') return loadPaint(it.v);
+    const inCar = p.x > 0 && p.x < 400 && p.y > -10 && p.y < 160;
+    if (it.kind === 'roof') return inCar ? placeRoof(it.v) : toast('지붕은 차체 위에 얹어 주세요');
+    if (it.kind === 'extra') return inCar ? setExtra(it.v) : toast('장식은 차 위에 놓아 주세요');
+    if (it.kind === 'wheel') {
+      const c = CARS[build.body];
+      const d = c.wx.map(wx => Math.hypot(wx - p.x, c.axle - p.y));
+      const i = d[0] < d[1] ? 0 : 1;
+      return d[i] < 70 ? installWheel(i, it.v) : toast('바퀴는 휠하우스에 끼워 주세요');
+    }
+  }
+
+  function bindDrag(el, it) {
+    let start = null, ghost = null;
+    el.addEventListener('pointerdown', e => {
+      if (busy || e.button > 0) return;
+      start = { x: e.clientX, y: e.clientY };
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', e => {
+      if (!start) return;
+      if (!ghost && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) {
+        ghost = document.createElement('div');
+        ghost.className = 'dragghost';
+        ghost.innerHTML = thumb(it.kind, it.v);
+        document.body.appendChild(ghost);
+        el.classList.add('dragging');
+      }
+      if (ghost) {
+        ghost.style.transform = `translate(${e.clientX - 42}px, ${e.clientY - 30}px)`;
+        const sr = $('stagebox').getBoundingClientRect();
+        $('stagebox').classList.toggle('over', e.clientX >= sr.left && e.clientX <= sr.right && e.clientY >= sr.top && e.clientY <= sr.bottom);
+        const sb = $('signBox');
+        if (sb) { const r = sb.getBoundingClientRect(); sb.classList.toggle('over', e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom); }
+      }
+    });
+    const end = e => {
+      if (!start) return;
+      const wasDrag = !!ghost;
+      if (ghost) { ghost.remove(); ghost = null; }
+      el.classList.remove('dragging');
+      $('stagebox').classList.remove('over');
+      start = null;
+      if (e.type === 'pointercancel') return;
+      if (wasDrag) dropItem(it, e.clientX, e.clientY); else useItem(it);
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('keydown', e => { if (e.key === ' ') { e.preventDefault(); useItem(it); } });
+  }
+
+  // ================= tools on the stage (torch, spray gun) =================
+  function carToScene(x, y) { return { x: 40 + x * 0.8, y: 70 + y * 0.8 }; }
+  function drawTool(x, y) {
+    const fx = $('fx');
+    let t = $('tool');
+    if (!t) t = svgEl('g', { id: 'tool' }, fx);
+    if (station === 1) t.innerHTML = `<circle r="12" fill="url(#glow)"/><path d="M2 -4 L30 -34 L36 -28 L8 2 Z" fill="#4b5560" stroke="${INK}" stroke-width="1.5"/><rect x="28" y="-46" width="12" height="16" rx="3" fill="#d63a2f" stroke="${INK}" stroke-width="1.5" transform="rotate(42 34 -38)"/>`;
+    else t.innerHTML = `<path d="M0 0 L-26 -18 L-26 18 Z" fill="${PAINT[build.top] || '#ccc'}" opacity=".35"/><rect x="0" y="-7" width="26" height="14" rx="3" fill="#5d6874" stroke="${INK}" stroke-width="1.5"/><rect x="16" y="5" width="8" height="18" rx="2" fill="#3a434c" stroke="${INK}" stroke-width="1.5"/><rect x="6" y="-20" width="14" height="13" rx="2" fill="${PAINT[build.top] || '#ccc'}" stroke="${INK}" stroke-width="1.5"/>`;
+    t.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+  }
+  function hideTool() { const t = $('tool'); if (t) t.remove(); }
+
+  let toolDown = false;
+  scene.addEventListener('pointerdown', e => {
+    if (phase !== 'build' || busy) return;
+    if ((station === 1 && build.roof && !build.welded) || (station === 2 && build.top)) {
+      toolDown = true; lastDot = null;
+      scene.setPointerCapture(e.pointerId);
+      toolMove(e);
+    }
+  });
+  scene.addEventListener('pointermove', e => {
+    if (phase !== 'build' || busy) return;
+    if ((station === 1 && build.roof && !build.welded) || (station === 2 && build.top)) toolMove(e);
+  });
+  const toolUp = () => { toolDown = false; };
+  scene.addEventListener('pointerup', toolUp);
+  scene.addEventListener('pointercancel', toolUp);
+  scene.addEventListener('pointerleave', () => { if (!toolDown) hideTool(); });
+  function toolMove(e) {
+    const sp = toSvg(scene, e.clientX, e.clientY);
+    drawTool(sp.x, sp.y);
+    if (!toolDown) return;
+    const cp = toSvg($('carG'), e.clientX, e.clientY);
+    if (station === 1) weldAt(cp.x, cp.y);
+    else sprayAt(cp.x, cp.y);
+  }
+
+  // ================= effects =================
+  function sparks(x, y, n, color) {
+    const fx = $('fx');
+    for (let i = 0; i < n; i++) {
+      const c = svgEl('circle', { cx: x, cy: y, r: 1.6, fill: color }, fx);
+      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * 18;
+      c.animate([{ transform: 'translate(0,0)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d + 8}px)`, opacity: 0 }], { duration: 380, easing: 'ease-out' });
+      setTimeout(() => c.remove(), 400);
+    }
+  }
+  function flashCar(color) {
+    $('carG').animate([{ filter: `drop-shadow(0 0 6px ${color}) brightness(1.4)` }, { filter: 'none' }], { duration: 500 });
+  }
+  function flash(kind) { const f = $('flash'); f.className = 'flash'; void f.offsetWidth; f.className = 'flash ' + kind; }
+  function shake() { const app = $('app'); app.classList.remove('shake'); void app.offsetWidth; app.classList.add('shake'); }
+  function floatText(text, bad) {
+    const el = document.createElement('div');
+    el.className = 'float' + (bad ? ' cut' : '');
+    el.textContent = text;
+    $('counter').appendChild(el);
+    setTimeout(() => el.remove(), 1100);
+  }
+  function wiggle(btn) { btn.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(0)' }], { duration: 200 }); }
+  function press(btn) { if (!btn || btn.disabled) return; btn.classList.add('pressed'); setTimeout(() => btn.classList.remove('pressed'), 90); }
+
+  // ================= rendering =================
+  function renderHud() {
+    const { m, d } = dateOf(G.day);
+    $('dateVal').textContent = `${m}월 ${d}일 · ${SEASON[seasonOf(G.day)]}`;
+    $('dayVal').textContent = `영업 ${G.day}일째 / ${YEAR}`;
+    $('moneyVal').textContent = won(G.money);
+    $('custVal').textContent = `${D.n}/${PER_DAY}`;
+    const r = rating();
+    $('ratingVal').textContent = '★' + r.toFixed(1);
+    $('ratingBox').classList.toggle('danger', r < 3);
+  }
+  function renderLine() {
+    const cur = phase === 'build' ? station : phase === 'deliver' || phase === 'result' ? 4 : -1;
+    $('line').innerHTML = STATIONS.map((s, i) =>
+      `<div class="st ${i < cur ? 'done' : i === cur ? 'now' : ''}">${i < cur ? '✓ ' : ''}${s.name}<small>${s.sub}</small></div>`).join('');
+  }
+  function renderTip() {
+    const left = Math.max(0, C.tipWindow - C.elapsed), ratio = left / C.tipWindow;
+    $('gaugeFill').style.width = ratio * 100 + '%';
+    $('gauge').className = 'gauge' + (ratio <= 0.25 ? ' low' : ratio <= 0.55 ? ' mid' : '');
+    $('tipVal').textContent = left > 0 ? `빠른 팁 ${Math.ceil(left)}초` : '팁 시간 끝';
+  }
+
+  function tick(ts) {
+    const dt = last ? Math.min(0.1, (ts - last) / 1000) : 0;
+    last = ts;
+    if (phase === 'build' && C) { C.elapsed += dt; renderTip(); }
+    requestAnimationFrame(tick);
+  }
+
+  // ================= input =================
+  $('mainBtn').addEventListener('click', mainAction);
+  $('scrapBtn').addEventListener('click', scrap);
+  $('closeBtn').addEventListener('click', closeEarly);
+  $('bubble').addEventListener('click', () => typeOut.finish && typeOut.finish());
+
+  document.addEventListener('keydown', e => {
+    const k = e.key;
+    const confirmKey = k === 'Enter' || k === ' ';
+    const isPart = e.target && e.target.classList && e.target.classList.contains('part');
+    if ((confirmKey && !isPart) || k === 'Backspace' || /^[1-9]$/.test(k)) e.preventDefault();
+    if (e.repeat || isPart && k === ' ') return;
+    if (phase === 'arrive') { if (confirmKey && typeOut.finish) typeOut.finish(); return; }
+    if (phase === 'contract' || phase === 'build') {
+      if (/^[1-9]$/.test(k)) { const btn = $('tray').querySelector(`[data-i="${+k - 1}"]`); press(btn); useItem(ITEMS[+k - 1]); }
+      else if (k === 'Enter') { press($('mainBtn')); mainAction(); }
+      else if (k === 'Backspace') { press($('scrapBtn')); scrap(); }
+      return;
+    }
+    if (phase === 'result') { if (confirmKey) afterResult(); return; }
+    if (confirmKey) { const b = $('screen').querySelector('[data-act]'); if (b && !$('screen').hidden) act(b.dataset.act); }
+  });
+
+  splashScreen();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
